@@ -11,7 +11,7 @@ Newest entries at the bottom of each section. Checkboxes = still to do.
 
 | # | Milestone | Est. days | Status | Started | Done |
 |---|---|---|---|---|---|
-| 1 | Finish Phase 1: review golden set, full baseline run, commit | 1 | 🟡 in progress | 2026-10-01 | |
+| 1 | Finish Phase 1: review golden set, full baseline run, commit | 1 | ✅ Completed | 2026-10-01 | |
 | 2 | New corpus: download 10-Ks + JSON facts + annual-report PDF | 1 | ⬜ | | |
 | 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | ⬜ | | |
 | 4 | New golden set (~50 Qs) for 10-K corpus + baseline eval | 1.5 | ⬜ | | |
