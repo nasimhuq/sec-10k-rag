@@ -1,0 +1,38 @@
+[project]
+name = "sec-10k-rag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "nasimhuq", email = "nasim.huq@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.4",
+]
+
+[project.scripts]
+sec-10k-rag = "sec_10k_rag:main"
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "ruff>=0.16.9",
+]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN"]
