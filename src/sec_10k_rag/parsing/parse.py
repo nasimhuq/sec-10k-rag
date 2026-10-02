@@ -122,6 +122,7 @@ def read_filing(entry: ManifestEntry) -> tuple[bytes, str]:
 
 
 def main() -> None:
+    """Parse every filing in data/raw, print a report for each, and write sections.jsonl. (I/O)"""
     sections: list[Section] = []
     for manifest_path in sorted(RAW_DIR.glob("*/manifest.json")):
         for entry in load_manifest(manifest_path.read_bytes()):
