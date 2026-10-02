@@ -1,0 +1,10 @@
+10k.html 
+  ──html_to_text──> plain text 
+  ──split_into_items──> RawSections 
+  ──tag_sections──> Sections
+
+full_submission.txt 
+  ──extract_10k_html──> 10-K HTML 
+  ──(same path as above)──> Sections same_items(html sections, txt sections) -> match?
+
+all Sections ──to_jsonl──> data/processed/sections.jsonl
