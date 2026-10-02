@@ -1,4 +1,8 @@
-"""Tests for the Item splitter, on small hand-written filings."""
+"""Tests for parsing, on small hand-written filings."""
+
+from pathlib import Path
+
+import pytest
 
 from sec_10k_rag.parsing.html_text import html_to_text
 from sec_10k_rag.parsing.sections import split_into_items
@@ -23,6 +27,11 @@ Supply chains may break.
 Item 7. Management's Discussion and Analysis
 Revenue grew.
 """
+
+
+@pytest.fixture
+def fixtures_dir() -> Path:
+    return Path(__file__).parent / "fixtures"
 
 
 def test_skips_table_of_contents_and_page_headers() -> None:
@@ -51,3 +60,13 @@ def test_extract_10k_html_picks_the_10k_document() -> None:
         "<DOCUMENT>\n<TYPE>EX-21.1\n<TEXT>\n<html>subsidiaries</html>\n</TEXT>\n</DOCUMENT>\n"
     )
     assert extract_10k_html(submission).strip() == "<html>main</html>"
+
+
+def test_missing_item_is_skipped(fixtures_dir: Path) -> None:
+    file_path = fixtures_dir / "missing_items_in_filing.txt"
+    test_data = file_path.read_text(encoding="utf-8")
+    sections = split_into_items(test_data)
+    expected_items = ["1", "7"]
+    assert [section.item for section in sections] == expected_items
+    assert sections[0].text.startswith("Item 1. Business\nWe design")
+    assert sections[-1].text.endswith("Total revenues grew 3% in 2025.")

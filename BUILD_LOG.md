@@ -12,8 +12,8 @@ Newest entries at the bottom of each section. Checkboxes = still to do.
 | # | Milestone | Est. days | Status | Started | Done |
 |---|---|---|---|---|---|
 | 1 | Finish Phase 1: review golden set, full baseline run, commit | 1 | ✅  | 2026-10-01 | 2026-10-01 |
-| 2 | New corpus: download 10-Ks + JSON facts + annual-report PDF | 1 | 🟡  |2026-10-01  | |
-| 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | ⬜ | | |
+| 2 | New corpus: download 10-Ks + JSON facts + annual-report PDF | 1 | ✅  |2026-10-01  | 2026-10-02|
+| 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | 🟡 | 2026-10-02 | |
 | 4 | New golden set (~50 Qs) for 10-K corpus + baseline eval | 1.5 | ⬜ | | |
 | 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | ⬜ | | |
 | 6 | MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop | 2 | ⬜ | | |
