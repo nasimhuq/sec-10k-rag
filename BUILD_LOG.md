@@ -13,8 +13,8 @@ Newest entries at the bottom of each section. Checkboxes = still to do.
 |---|---|---|---|---|---|
 | 1 | Finish Phase 1: review golden set, full baseline run, commit | 1 | ✅  | 2026-10-01 | 2026-10-01 |
 | 2 | New corpus: download 10-Ks + JSON facts + annual-report PDF | 1 | ✅  |2026-10-01  | 2026-10-02|
-| 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | 🟡 | 2026-10-02 | |
-| 4 | New golden set (~50 Qs) for 10-K corpus + baseline eval | 1.5 | ⬜ | | |
+| 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | ✅ | 2026-10-02 |2026-10-04 |
+| 4 | New golden set (~50 Qs) for 10-K corpus + baseline eval | 1.5 | 🟡 |2026-10-05 | |
 | 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | ⬜ | | |
 | 6 | MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop | 2 | ⬜ | | |
 | 7 | Presentable: Streamlit UI, tests, Dockerfile, README (diagram + scorecard), demo video, GitHub | 2.5 | ⬜ | | |
@@ -115,3 +115,68 @@ Status key: ⬜ not started · 🟡 in progress · ✅ done
 ## Steps 2–10
 
 Detailed notes get added here as each milestone starts (see the Progress tracker above).
+
+### Step 4 — Postgres + pgvector
+
+- [x] **4a** Postgres + pgvector in Docker: install Docker via snap, `compose.yaml` with `pgvector/pgvector:pg17`, `db/init/001_extension.sql`, `.env` vars
+  - [x] Is Docker already installed?
+    - `docker --version`
+  - [x] Install Docker from snap
+    - `sudo snap install docker`
+  - [x] Run Docker without `sudo`
+    - `sudo addgroup --system docker`
+    - `sudo adduser $USER docker`
+    - `newgrp docker`
+    - `sudo snap disable docker && sudo snap enable docker`
+  - [x] Check Docker and Compose work
+    - `docker run hello-world`
+    - `docker compose version`
+  - [x] Add DB vars to `.env` (already git-ignored)
+    - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT=5432`
+  - [x] Create `db/init/001_extension.sql`
+    - `CREATE EXTENSION IF NOT EXISTS vector;`
+  - [x] Create `compose.yaml`
+    - service `db`, image `pgvector/pgvector:pg17`, `env_file: .env`, port `5432:5432`
+    - volumes: named volume `pgdata` → `/var/lib/postgresql/data`, `./db/init` → `/docker-entrypoint-initdb.d`
+  - [x] Start the container
+    - `docker compose up -d`
+    - `docker compose ps` (status = running)
+  - [x] Check pgvector is enabled
+    - `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dx"'` (lists `vector`)
+  - Note: `db/init/*.sql` only runs on an empty volume. To re-run: `docker compose down -v && docker compose up -d`
+- [ ] 🟡 **4b** Create tables: `chunks` (with `vector(384)`), `facts`
+  - [ ] Add Python deps
+    - `uv add "psycopg[binary]" pgvector`
+  - [ ] Create `db/init/002_tables.sql`
+    - `chunks`: `chunk_id` (PK), `section_id`, `ticker`, `cik`, `fiscal_year`, `item`, `title`, `chunk_index`, `text`, `embedding vector(384)`
+    - `facts`: same columns as `facts.parquet` (`cik`, `ticker`, `concept`, `label`, `unit`, `start`, `end`, `val`, `fiscal_year`, `fiscal_period`, `form`, `filed`, `frame`, …)
+  - [ ] Re-create the DB so the script runs
+    - `docker compose down -v && docker compose up -d`
+  - [ ] Check tables exist
+    - `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'`
+- [ ] **4c** Chunk 10-K sections (skip near-empty Items 4 and 6)
+  - [ ] Read `data/processed/sections.jsonl` (one row per 10-K Item)
+  - [ ] Drop Items 4 and 6
+  - [ ] Write a pure function `chunk_section(section, size, overlap) -> list[chunk]`; keep section metadata on every chunk
+  - [ ] Pick size/overlap (bge-small max = 512 tokens)
+  - [ ] Write `data/processed/chunks.jsonl`
+  - [ ] Test: no empty chunks, every chunk has `ticker`/`fiscal_year`/`item`, chunk IDs are stable (e.g. `MSFT-2026-item1-0003`)
+- [ ] **4d** Embed chunks (`BAAI/bge-small-en-v1.5`, sentence-transformers) and load into pgvector
+  - [ ] Add dep
+    - `uv add sentence-transformers`
+  - [ ] Load model, check output size
+    - `model.get_sentence_embedding_dimension()` → `384`
+  - [ ] Embed in batches with `normalize_embeddings=True`
+  - [ ] Insert into `chunks` (`register_vector(conn)`, `executemany` / `COPY`); upsert on `chunk_id` so re-runs are safe
+  - [ ] Add HNSW index
+    - `CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);`
+  - [ ] Check
+    - `SELECT count(*) FROM chunks;` = number of lines in `chunks.jsonl`
+    - test query: embed a question, `ORDER BY embedding <=> %s LIMIT 5`, results look relevant
+- [ ] **4e** Load `data/processed/facts.parquet` into the `facts` table
+  - [ ] Read with Polars
+    - `pl.read_parquet("data/processed/facts.parquet")` (81,810 rows)
+  - [ ] Insert with `COPY` (psycopg `cursor.copy`)
+  - [ ] Check
+    - `SELECT count(*) FROM facts;` = 81,810
+    - spot check: `SELECT ticker, fiscal_year, val FROM facts WHERE concept = 'Revenues' LIMIT 5;`
