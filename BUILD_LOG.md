@@ -144,17 +144,48 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
   - [x] Check pgvector is enabled
     - `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dx"'` (lists `vector`)
   - Note: `db/init/*.sql` only runs on an empty volume. To re-run: `docker compose down -v && docker compose up -d`
-- [ ] 🟡 **4b** Create tables: `chunks` (with `vector(384)`), `facts`
-  - [ ] Add Python deps
+- [x] **4b** Create tables: `chunks` (with `vector(384)`), `facts`
+  - [x] Add Python deps
     - `uv add "psycopg[binary]" pgvector`
-  - [ ] Create `db/init/002_tables.sql`
+  - [x] Create `db/init/002_tables.sql`
     - `chunks`: `chunk_id` (PK), `section_id`, `ticker`, `cik`, `fiscal_year`, `item`, `title`, `chunk_index`, `text`, `embedding vector(384)`
-    - `facts`: same columns as `facts.parquet` (`cik`, `ticker`, `concept`, `label`, `unit`, `start`, `end`, `val`, `fiscal_year`, `fiscal_period`, `form`, `filed`, `frame`, …)
-  - [ ] Re-create the DB so the script runs
+    - `facts`: same columns as `facts.parquet`, renamed `entityName`→`entity_name`, `start`→`start_date`, `end`→`end_date` (`end` is a reserved SQL word)
+  - [x] Generate a draft `CREATE TABLE facts` from the Parquet schema (DuckDB in DBeaver, `:memory:` connection)
+    ```sql
+    SELECT 
+        'CREATE TABLE facts (' || 
+        string_agg(
+            name || ' ' || 
+            CASE LOWER(type)
+                WHEN 'boolean' THEN 'boolean'
+                WHEN 'int32' THEN 'integer'
+                WHEN 'int64' THEN 'bigint'
+                WHEN 'float' THEN 'real'
+                WHEN 'double' THEN 'double precision'
+                WHEN 'string' THEN 'text'
+                WHEN 'binary' THEN 'bytea'
+                WHEN 'timestamp_ms' THEN 'timestamp'
+                WHEN 'timestamp_us' THEN 'timestamp'
+                WHEN 'date' THEN 'date'
+                ELSE 'text' -- Default fallback for complex/nested types
+            END,
+            ', '
+        ) || ');' AS create_table_statement
+    FROM parquet_schema('/home/nasim/Desktop/work/rag/sec-10k-rag/data/processed/facts.parquet');
+    ```
+    - Gotchas: `type` is the Parquet *physical* type, so the output needs hand fixes
+      - an extra `root` row (the schema root, not a column) → remove it
+      - dates are stored as `INT32` (logical type `DATE`) → come out as `integer`; change to `date`
+      - strings are `BYTE_ARRAY` → hit the `ELSE 'text'` fallback (correct by luck)
+      - `end` is a reserved SQL word → rename to `end_date`
+  - [x] Dry-run the script (runs inside a transaction, then rolls back, so the DB is unchanged)
+    - `{ echo 'BEGIN;'; cat db/init/002_tables.sql; echo; echo 'ROLLBACK;'; } | docker compose exec -T db psql -U rag -d sec10k`
+    - Expect `CREATE TABLE` twice and no `ERROR`
+  - [x] Re-create the DB so the script runs
     - `docker compose down -v && docker compose up -d`
-  - [ ] Check tables exist
+  - [x] Check tables exist
     - `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'`
-- [ ] **4c** Chunk 10-K sections (skip near-empty Items 4 and 6)
+- [ ] 🟡 **4c** Chunk 10-K sections (skip near-empty Items 4 and 6)
   - [ ] Read `data/processed/sections.jsonl` (one row per 10-K Item)
   - [ ] Drop Items 4 and 6
   - [ ] Write a pure function `chunk_section(section, size, overlap) -> list[chunk]`; keep section metadata on every chunk

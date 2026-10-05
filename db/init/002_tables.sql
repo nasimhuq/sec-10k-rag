@@ -1,0 +1,30 @@
+CREATE TABLE chunks (
+    chunk_id TEXT PRIMARY KEY,
+    section_id TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    cik TEXT NOT NULL,
+    fiscal_year INT NOT NULL,
+    item TEXT,
+    title TEXT,
+    chunk_index INT NOT NULL,
+    text TEXT NOT NULL,
+    embedding VECTOR(384)
+);
+CREATE TABLE facts (
+  cik TEXT, 
+  entity_name TEXT, 
+  taxonomy TEXT, 
+  concept TEXT, 
+  label TEXT, 
+  description TEXT, 
+  unit TEXT, 
+  start_date DATE, 
+  end_date DATE, 
+  val DOUBLE PRECISION, 
+  accn TEXT, 
+  fiscal_year INTEGER, 
+  fiscal_period TEXT, 
+  form TEXT, 
+  filed DATE, 
+  frame TEXT, 
+  ticker TEXT);
