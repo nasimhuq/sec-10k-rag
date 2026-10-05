@@ -12,6 +12,17 @@ SourceFormat = Literal["html", "txt"]
 
 
 @dataclass(frozen=True)
+class Company_facts:
+    """Basic facts about a company."""
+
+    ticker: str
+    cik: str
+    name: str
+    fiscal_year_end: str
+    taxonomy: str  # e.g., "us-gaap", "dei"
+
+
+@dataclass(frozen=True)
 class ManifestEntry:
     """One row of data/raw/<TICKER>/manifest.json (written by download.py)."""
 

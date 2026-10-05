@@ -1,0 +1,40 @@
+{
+    "simple_map": {
+        "conversion": {
+            "cik": {
+                "format": "010d"
+            },
+            "start": {
+                "type": "date"
+            },
+            "end": {
+                "type": "date"
+            },
+            "filed": {
+                "type": "date"
+            },
+            "val": {
+                "type": "float"
+            }
+        },
+        "rename_columns": {
+            "__col2": "taxonomy",
+            "__col3": "concept",
+            "__col5": "unit",
+            "fp": "fiscal_period",
+            "fy": "fiscal_year"
+        },
+        "drop_columns": [],
+        "allowed_rows": {
+            "taxonomy": [
+                "us-gaap",
+                "dei"
+            ],
+            "form": [
+                "10-K",
+                "10-K/A",
+                "10-Q"
+            ]
+        }
+    }
+}
