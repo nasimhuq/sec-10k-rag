@@ -185,24 +185,47 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
     - `docker compose down -v && docker compose up -d`
   - [x] Check tables exist
     - `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'`
-- [ ] 🟡 **4c** Chunk 10-K sections (skip near-empty Items 4 and 6)
-  - [ ] Read `data/processed/sections.jsonl` (one row per 10-K Item)
-  - [ ] Drop Items 4 and 6
-  - [ ] Write a pure function `chunk_section(section, size, overlap) -> list[chunk]`; keep section metadata on every chunk
-  - [ ] Pick size/overlap (bge-small max = 512 tokens)
-  - [ ] Write `data/processed/chunks.jsonl`
-  - [ ] Test: no empty chunks, every chunk has `ticker`/`fiscal_year`/`item`, chunk IDs are stable (e.g. `MSFT-2026-item1-0003`)
+- [x] ✅ **4c** *Main purpose: turning 207 big sections into 2,977 small, searchable pieces that each fit the embedding model and carry their metadata, which will make retrieval precise.* Chunk 10-K sections (code in `src/sec_10k_rag/split_text/`)
+  - [x] Read `data/processed/sections.jsonl` (one row per 10-K Item, 207 rows)
+    - `load_ndjson(path)` → `pl.read_ndjson`
+  - [x] Drop near-empty sections with a generic length rule, not by Item number
+    - `drop_short_sections(df, min_chars=150)`: keeps `n_chars >= 150` → 168 kept, 39 dropped
+    - Dropped = heading + "None." / "Not applicable." / "[Reserved]" (Items 1B, 4, 6, 9, 9C); works for any company
+    - (Replaces the earlier "drop Items 4 and 6" and fixed 1,500/200-char slicing ideas)
+  - [x] Pack whole lines (paragraphs) into chunks, no overlap: `chunk_sections(df, target_chars=1000, meta_columns)` (pure Polars, no loops)
+    - Why lines: fixed slicing cut sentences and words in half; each line in `text` is one paragraph, heading or table row (`\n`-separated, no `\n\n`)
+    - Why 1,000: bge-small reads max 512 tokens (~2,000 chars); bigger chunks get cut off and mix topics
+    1. `str.split("\n")` → `.explode("para")` → one row per line; drop blank / whitespace-only lines
+    2. `para_len = str.len_chars().cast(pl.Int64)` (`u32` would wrap below 0)
+    3. `para_start_pos = (para_len + 1).cum_sum().over("section_id") - para_len - 1` (where each line starts; `+ 1` = the `\n`)
+    4. `bucket = para_start_pos // target_chars` (which ~1,000-char window the line starts in)
+    5. `group_by("section_id", "bucket", maintain_order=True).agg(str.join("\n"), first() of metadata)` → one row per chunk, lines in order
+    6. `chunk_index = pl.int_range(pl.len()).over("section_id")` → 0..n-1 per section
+    7. `report_date` → `str.to_date()`
+  - [x] Key = `(section_id, chunk_index)`; no separate `chunk_id` column (deterministic, so re-runs give the same keys)
+  - [x] Keep metadata on every chunk: `section_id`, `ticker`, `cik`, `fiscal_year`, `item`, `title`, `report_date`, `source_url`
+  - [x] `run.py` writes `data/processed/chunks.parquet`
+    - `uv run python -m sec_10k_rag.split_text.run`
+    - 2,977 chunks (MSFT 938, NVDA 939, TSLA 1,100); 0 nulls; keys unique
+    - length: min 6, median 1,008, max 4,021 chars; 98 chunks > 2,000 chars (single very long lines)
+  - [x] `chunks` table: `PRIMARY KEY (section_id, chunk_index)`, added `report_date DATE`, `source_url TEXT`; DB re-created, checked with `\d chunks`
+  - [x] Tests `tests/test_split_text.py` (7): drop short sections, packing by start position, lines never cut, blank lines dropped, rejoined chunks = original text, `chunk_index` 0..n-1 per section + unique keys, metadata kept + `report_date` is `Date`
+  - [ ] Later (only if eval shows a need): cut lines > 1,000 chars before packing (fixes the 98 long chunks), merge tiny last chunks, overlap of ~200 chars of whole lines
 - [ ] **4d** Embed chunks (`BAAI/bge-small-en-v1.5`, sentence-transformers) and load into pgvector
   - [ ] Add dep
     - `uv add sentence-transformers`
+  - [ ] Read `data/processed/chunks.parquet` with Polars (2,977 rows)
   - [ ] Load model, check output size
     - `model.get_sentence_embedding_dimension()` → `384`
-  - [ ] Embed in batches with `normalize_embeddings=True`
-  - [ ] Insert into `chunks` (`register_vector(conn)`, `executemany` / `COPY`); upsert on `chunk_id` so re-runs are safe
+  - [ ] Check token lengths of chunks (how many are over 512 tokens and get cut off)
+  - [ ] Embed `text` in batches with `normalize_embeddings=True`
+  - [ ] Insert into `chunks` (`register_vector(conn)`, `executemany` / `COPY`)
+    - upsert so re-runs are safe: `ON CONFLICT (section_id, chunk_index) DO UPDATE`
   - [ ] Add HNSW index
     - `CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);`
   - [ ] Check
-    - `SELECT count(*) FROM chunks;` = number of lines in `chunks.jsonl`
+    - `SELECT count(*) FROM chunks;` = 2,977 (rows in `chunks.parquet`)
+    - `SELECT count(*) FROM chunks WHERE embedding IS NULL;` = 0
     - test query: embed a question, `ORDER BY embedding <=> %s LIMIT 5`, results look relevant
 - [ ] **4e** Load `data/processed/facts.parquet` into the `facts` table
   - [ ] Read with Polars

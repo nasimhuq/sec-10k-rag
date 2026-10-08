@@ -1,12 +1,14 @@
 CREATE TABLE chunks (
-    chunk_id TEXT PRIMARY KEY,
+    report_date DATE,
+    source_url TEXT,
+    PRIMARY KEY (section_id, chunk_index),
     section_id TEXT NOT NULL,
+    chunk_index INT NOT NULL,
     ticker TEXT NOT NULL,
     cik TEXT NOT NULL,
     fiscal_year INT NOT NULL,
     item TEXT,
     title TEXT,
-    chunk_index INT NOT NULL,
     text TEXT NOT NULL,
     embedding VECTOR(384)
 );

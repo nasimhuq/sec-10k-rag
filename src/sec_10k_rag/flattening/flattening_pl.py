@@ -3,6 +3,7 @@ from pathlib import Path
 
 import polars as pl
 
+from sec_10k_rag.common.common import write_to_parquet_file
 from sec_10k_rag.flattening.flatten_pl import apply_map, convert, flatten
 
 RAW_DIR = Path("data/raw")
@@ -19,19 +20,6 @@ def load_config_map() -> pl.DataFrame:
     return pl.read_json(config_path).select("simple_map").unnest("simple_map")
 
 
-def write_facts(facts: pl.DataFrame) -> None:
-    """Delete existing facts file and write new facts."""
-    if OUT_FILE.exists():
-        OUT_FILE.unlink()
-        print(f"Deleted existing facts file: {OUT_FILE}")
-
-    t = time.perf_counter()
-    print(f"Writing facts to {OUT_FILE}...")
-    OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    facts.write_parquet(OUT_FILE)
-    print(f"wrote {facts.height} rows to {OUT_FILE} in {time.perf_counter() - t:.2f}s")
-
-
 def main() -> None:
     cfg_df = load_config_map()
     print(f"Loaded configuration mapping with {cfg_df.height} rows")
@@ -45,7 +33,8 @@ def main() -> None:
         print(p.parent.name, out_df.height, f"{time.perf_counter() - t:.2f}s")
 
     facts = pl.concat(frames, how="diagonal_relaxed")
-    write_facts(facts)
+    write_to_parquet_file(facts, OUT_FILE)
+    # write_facts(facts)
 
 
 if __name__ == "__main__":
