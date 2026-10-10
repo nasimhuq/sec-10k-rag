@@ -14,7 +14,8 @@ Newest entries at the bottom of each section. Checkboxes = still to do.
 | 1 | Finish Phase 1: review golden set, full baseline run, commit | 1 | ✅  | 2026-10-01 | 2026-10-01 |
 | 2 | New corpus: download 10-Ks + JSON facts + annual-report PDF | 1 | ✅  |2026-10-01  | 2026-10-02|
 | 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | ✅ | 2026-10-02 |2026-10-04 |
-| 4 | New golden set (~50 Qs) for 10-K corpus + baseline eval | 1.5 | 🟡 |2026-10-05 | |
+| 4 | Postgres + pgvector: Docker DB, tables, chunk 10-K sections, embed, load into pgvector | — | ✅ (facts load deferred) |2026-10-05 | 2026-10-10 |
+| 4.5 | New golden set (~50 Qs) for 10-K corpus + baseline eval | 1.5 | ⬜ | | |
 | 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | ⬜ | | |
 | 6 | MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop | 2 | ⬜ | | |
 | 7 | Presentable: Streamlit UI, tests, Dockerfile, README (diagram + scorecard), demo video, GitHub | 2.5 | ⬜ | | |
@@ -116,7 +117,9 @@ Status key: ⬜ not started · 🟡 in progress · ✅ done
 
 Detailed notes get added here as each milestone starts (see the Progress tracker above).
 
-### Step 4 — Postgres + pgvector
+### Step 4 — Postgres + pgvector ✅ (2026-10-10)
+
+**Note:** facts load deferred (4e). The `facts` table exists but is empty.
 
 - [x] **4a** Postgres + pgvector in Docker: install Docker via snap, `compose.yaml` with `pgvector/pgvector:pg17`, `db/init/001_extension.sql`, `.env` vars
   - [x] Is Docker already installed?
@@ -148,7 +151,7 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
   - [x] Add Python deps
     - `uv add "psycopg[binary]" pgvector`
   - [x] Create `db/init/002_tables.sql`
-    - `chunks`: `chunk_id` (PK), `section_id`, `ticker`, `cik`, `fiscal_year`, `item`, `title`, `chunk_index`, `text`, `embedding vector(384)`
+    - `chunks`: `PRIMARY KEY (section_id, chunk_index)`, `ticker`, `cik`, `fiscal_year`, `item`, `title`, `text`, `embedding vector(384)`, `report_date`, `source_url` (key and last two columns changed in 4c)
     - `facts`: same columns as `facts.parquet`, renamed `entityName`→`entity_name`, `start`→`start_date`, `end`→`end_date` (`end` is a reserved SQL word)
   - [x] Generate a draft `CREATE TABLE facts` from the Parquet schema (DuckDB in DBeaver, `:memory:` connection)
     ```sql
@@ -211,23 +214,63 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
   - [x] `chunks` table: `PRIMARY KEY (section_id, chunk_index)`, added `report_date DATE`, `source_url TEXT`; DB re-created, checked with `\d chunks`
   - [x] Tests `tests/test_split_text.py` (7): drop short sections, packing by start position, lines never cut, blank lines dropped, rejoined chunks = original text, `chunk_index` 0..n-1 per section + unique keys, metadata kept + `report_date` is `Date`
   - [ ] Later (only if eval shows a need): cut lines > 1,000 chars before packing (fixes the 98 long chunks), merge tiny last chunks, overlap of ~200 chars of whole lines
-- [ ] **4d** Embed chunks (`BAAI/bge-small-en-v1.5`, sentence-transformers) and load into pgvector
-  - [ ] Add dep
+- [x] ✅ **4d** (2026-10-10) *Main purpose: turning each chunk's text into a 384-number vector and storing it in Postgres, so chunks can be searched by meaning.* Embed chunks (`BAAI/bge-small-en-v1.5`, sentence-transformers) and load into pgvector
+  - [x] Add dep
     - `uv add sentence-transformers`
-  - [ ] Read `data/processed/chunks.parquet` with Polars (2,977 rows)
-  - [ ] Load model, check output size
-    - `model.get_sentence_embedding_dimension()` → `384`
-  - [ ] Check token lengths of chunks (how many are over 512 tokens and get cut off)
-  - [ ] Embed `text` in batches with `normalize_embeddings=True`
-  - [ ] Insert into `chunks` (`register_vector(conn)`, `executemany` / `COPY`)
-    - upsert so re-runs are safe: `ON CONFLICT (section_id, chunk_index) DO UPDATE`
-  - [ ] Add HNSW index
-    - `CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);`
-  - [ ] Check
-    - `SELECT count(*) FROM chunks;` = 2,977 (rows in `chunks.parquet`)
-    - `SELECT count(*) FROM chunks WHERE embedding IS NULL;` = 0
-    - test query: embed a question, `ORDER BY embedding <=> %s LIMIT 5`, results look relevant
-- [ ] **4e** Load `data/processed/facts.parquet` into the `facts` table
+  - [x] Stage 1: embed (code in `src/sec_10k_rag/embedding/`) → `data/processed/embedding/chunks_embedded.parquet`
+    - `uv run python -m sec_10k_rag.embedding.run`
+    - `config.py`: `Config[EmbeddingInstructions]` (`model_name`, `batch_size=64`); `load.py` reads `data/processed/chunks.parquet` (2,977 rows)
+    - Model output size: `model.get_sentence_embedding_dimension()` → `384`; `model.max_seq_length` → `512`
+    - `tokenize.py` + `report.py`: token length per chunk → 27 of 2,977 chunks are over 512 tokens and get cut off (min 4, median 209, max 740)
+    - `vectorize.py`: `model.encode(texts, batch_size=64, normalize_embeddings=True)` → `embedding` column, `Array(Float32, 384)`, 0 nulls
+    - No separate normalize step: the model already ends with a `Normalize` layer (vector length = 1 either way)
+  - [x] Stage 2: load into Postgres (code in `src/sec_10k_rag/db_load/`)
+    - `uv run python -m sec_10k_rag.db_load.run` → `loaded 2977 rows into chunks`
+    - `convert_embedding_column_to_text(df)`: vector → pgvector text `"[0.01,-0.02,...]"` (cast to `List(String)` → `list.join(",")` → `pl.format("[{}]", ...)`)
+    - `replace_rows(conn, df, "chunks")`: `TRUNCATE chunks`, then `COPY chunks (...) FROM STDIN WITH (FORMAT csv, HEADER true)` fed by `df.write_csv()` (a string, no file)
+    - HNSW index: `CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops)`
+    - Verify in code: `count(*)` and `count(embedding)` must equal `df.height`, else `raise ValueError`
+    - All of the above run in one transaction: any error or failed verify rolls everything back (old rows stay)
+    - Re-run safe: ran twice, 2,977 rows both times
+  - [x] Decisions
+    - `TRUNCATE` + `COPY` instead of upsert: the Parquet file is the full source of truth, so a full replace is simpler and leaves no stale chunks
+    - CSV in memory, sent by psycopg: Postgres runs in Docker and cannot read files on the host
+    - Two stages with Parquet between them: can re-load the DB without re-embedding
+    - Shelved for a day-2 project: scheduled server-side CSV loader
+  - [x] Check (2026-10-10)
+    - Rows, nulls, vector size: `SELECT count(*), count(embedding), min(vector_dims(embedding)), max(vector_dims(embedding)) FROM chunks;` → `2977 | 2977 | 384 | 384`
+    - Rows per company: `SELECT ticker, count(*) FROM chunks GROUP BY ticker ORDER BY ticker;` → MSFT 938, NVDA 939, TSLA 1,100 (same as `chunks.parquet`)
+    - Vectors are unit length: `SELECT min(vector_norm(embedding)), max(vector_norm(embedding)) FROM chunks;` → `1 | 1`
+    - Indexes: `SELECT indexdef FROM pg_indexes WHERE tablename = 'chunks';` → `chunks_pkey` (btree) + `chunks_embedding_hnsw` (hnsw, `vector_cosine_ops`)
+    - Nearest-neighbour test in SQL (DBeaver): chunks closest to one known chunk
+      ```sql
+      SELECT section_id, chunk_index,
+             embedding <=> (SELECT embedding FROM chunks
+                            WHERE section_id = 'TSLA-2025-item1A' AND chunk_index = 0) AS dist,
+             left(text, 80)
+      FROM chunks
+      ORDER BY dist
+      LIMIT 5;
+      ```
+      | # | section_id | chunk_index | dist | text |
+      |---|---|---|---|---|
+      | 1 | TSLA-2025-item1A | 0 | 0 | ITEM 1A. RISK FACTORS… (the chunk itself) |
+      | 2 | TSLA-2023-item1A | 0 | 0.027 | ITEM 1A. RISK FACTORS… |
+      | 3 | TSLA-2024-item1A | 0 | 0.027 | ITEM 1A. RISK FACTORS… |
+      | 4 | NVDA-2025-item1A | 0 | 0.097 | Item 1A. Risk Factors… |
+      | 5 | NVDA-2026-item1A | 0 | 0.098 | Item 1A. Risk Factors… |
+      - `<=>` = cosine distance (0 = same, bigger = less similar)
+      - `EXPLAIN` on the same query → `Index Scan using chunks_embedding_hnsw` (the index is used)
+    - Question test in Python: embed `"Represent this sentence for searching relevant passages: What are Tesla's main risk factors?"` (`normalize_embeddings=True`), then `ORDER BY embedding <=> %s::vector LIMIT 5`
+      - Top 5: TSLA-2023-item1A #12 (0.275), TSLA-2024-item1A #11 (0.275), TSLA-2025-item1A #11 (0.287), TSLA-2025-item1A #50 (0.288), NVDA-2026-item1A #0 (0.307) → 4 of 5 are Tesla risk factors
+      - `%s` is a psycopg placeholder: it works only from Python, not in a SQL client (DBeaver gives `syntax error at or near "%"`)
+    - Code checks: `uv run ruff check src tests` → passed; `uv run pyright src tests` → 0 errors; `uv run pytest -q` → 11 passed
+  - [ ] Later (build step 5)
+    - Add a `ticker` filter: in the question test, result 5 is the right topic but the wrong company
+    - Add a `fiscal_year` filter or remove duplicates: in the question test, results 1 and 2 are the same paragraph from two years
+    - Pick one rule for the bge query prefix and use it everywhere
+- [ ] **4e** (deferred) Load `data/processed/facts.parquet` into the `facts` table
+  - Note: facts load deferred. Plan: rename `entityName`→`entity_name`, `start`→`start_date`, `end`→`end_date`, then reuse `replace_rows(conn, df, "facts")` from `db_load/libs.py`
   - [ ] Read with Polars
     - `pl.read_parquet("data/processed/facts.parquet")` (81,810 rows)
   - [ ] Insert with `COPY` (psycopg `cursor.copy`)
