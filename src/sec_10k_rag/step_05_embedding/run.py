@@ -1,9 +1,9 @@
 from sec_10k_rag.common.common import write_to_parquet_file
-from sec_10k_rag.embedding.config import ConfigType, get_config
-from sec_10k_rag.embedding.load import load_chunks
-from sec_10k_rag.embedding.report import report_results
-from sec_10k_rag.embedding.tokenize import tokenize
-from sec_10k_rag.embedding.vectorize import vectorize
+from sec_10k_rag.step_05_embedding.config import ConfigType, get_config
+from sec_10k_rag.step_05_embedding.load import load_chunks
+from sec_10k_rag.step_05_embedding.report import report_results
+from sec_10k_rag.step_05_embedding.tokenize import tokenize
+from sec_10k_rag.step_05_embedding.vectorize import vectorize
 
 
 def main() -> None:

@@ -1,3 +1,4 @@
+import subprocess
 import sys
 import threading
 import time
@@ -9,6 +10,8 @@ from itertools import cycle
 from pathlib import Path
 
 import polars as pl
+
+from sec_10k_rag.common.config import DB_SERVICE, ROOT_DIR
 
 # from sentence_transformers import SentenceTransformer
 
@@ -33,6 +36,14 @@ class _RunningCall:
 
 
 _progress_stack: list[_RunningCall] = []
+
+
+def start_db(service: str = DB_SERVICE) -> None:
+    subprocess.run(
+        ["docker", "compose", "up", "--detach", "--wait", service],
+        cwd=ROOT_DIR,
+        check=True,
+    )
 
 
 def write_to_parquet_file(df: pl.DataFrame, parquet_file_name: Path) -> None:

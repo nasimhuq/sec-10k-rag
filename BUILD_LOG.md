@@ -16,7 +16,7 @@ Newest entries at the bottom of each section. Checkboxes = still to do.
 | 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | ✅ | 2026-10-02 |2026-10-04 |
 | 4 | Postgres + pgvector: Docker DB, tables, chunk 10-K sections, embed, load into pgvector | — | ✅ (facts load deferred) |2026-10-05 | 2026-10-10 |
 | 4.5 | Search quality test: 50 questions with known answers, scored before improvements | 1.5 | ✅ | 2026-10-10 | 2026-10-12 |
-| 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | ⬜ | | |
+| 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | 🟡 |2026-10-12 | |
 | 6 | MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop | 2 | ⬜ | | |
 | 7 | Presentable: Streamlit UI, tests, Dockerfile, README (diagram + scorecard), demo video, GitHub | 2.5 | ⬜ | | |
 | | **MVP total** | **≈ 13–14** | | | |
@@ -46,6 +46,46 @@ Status key: ⬜ not started · 🟡 in progress · ✅ done
 | .mp4 | earnings call webcast from investor-relations site |
 
 - SEC downloads need a `User-Agent` header with name + email; max 10 requests/second.
+
+---
+
+## Data flow
+
+- Folder numbers under `src/sec_10k_rag/` follow this data flow, not the step numbers in the progress tracker.
+- Each step reads what the step before it writes. `step_03_flattening` is a side branch: nothing reads `facts.parquet` yet.
+
+```
+SEC EDGAR
+   │  step_01_download
+   ▼
+data/raw/<ticker>/  (10k.html, full_submission.txt, companyfacts.json, manifest.json)
+   │
+   ├── step_02_parsing ────────► data/processed/sections.jsonl
+   │                                │
+   │                                ▼
+   │                             step_04_split_text ──► data/processed/chunks.parquet
+   │                                                       │
+   │                                                       ▼
+   │                             step_05_embedding ───► data/processed/embedding/chunks_embedded.parquet
+   │                                                       │
+   │                                                       ▼
+   │                             step_06_db_load ─────► Postgres `chunks` (pgvector)
+   │                                                       │
+   │                                                       ▼
+   │                             step_07_search_quality ► data/processed/search_quality/scores.parquet
+   │
+   └── step_03_flattening ─────► data/processed/facts.parquet  (side branch)
+```
+
+| Step | Run | Reads | Writes |
+|---|---|---|---|
+| 01 | `uv run python -m sec_10k_rag.step_01_download.download` | SEC EDGAR | `data/raw/<ticker>/` |
+| 02 | `uv run python -m sec_10k_rag.step_02_parsing.parse` | `data/raw/` | `sections.jsonl` |
+| 03 | `uv run python -m sec_10k_rag.step_03_flattening.flattening_pl` | `data/raw/*/companyfacts.json` | `facts.parquet` |
+| 04 | `uv run python -m sec_10k_rag.step_04_split_text.run` | `sections.jsonl` | `chunks.parquet` |
+| 05 | `uv run python -m sec_10k_rag.step_05_embedding.run` | `chunks.parquet` | `embedding/chunks_embedded.parquet` |
+| 06 | `uv run python -m sec_10k_rag.step_06_db_load.run` | `chunks_embedded.parquet` | Postgres `chunks` |
+| 07 | `uv run python -m sec_10k_rag.step_07_search_quality.run` | Postgres `chunks` | `search_quality/questions.parquet`, `scores.parquet` |
 
 ---
 
@@ -188,7 +228,7 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
     - `docker compose down -v && docker compose up -d`
   - [x] Check tables exist
     - `docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'`
-- [x] ✅ **4c** *Main purpose: turning 207 big sections into 2,977 small, searchable pieces that each fit the embedding model and carry their metadata, which will make retrieval precise.* Chunk 10-K sections (code in `src/sec_10k_rag/split_text/`)
+- [x] ✅ **4c** *Main purpose: turning 207 big sections into 2,977 small, searchable pieces that each fit the embedding model and carry their metadata, which will make retrieval precise.* Chunk 10-K sections (code in `src/sec_10k_rag/step_04_split_text/`)
   - [x] Read `data/processed/sections.jsonl` (one row per 10-K Item, 207 rows)
     - `load_ndjson(path)` → `pl.read_ndjson`
   - [x] Drop near-empty sections with a generic length rule, not by Item number
@@ -208,7 +248,7 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
   - [x] Key = `(section_id, chunk_index)`; no separate `chunk_id` column (deterministic, so re-runs give the same keys)
   - [x] Keep metadata on every chunk: `section_id`, `ticker`, `cik`, `fiscal_year`, `item`, `title`, `report_date`, `source_url`
   - [x] `run.py` writes `data/processed/chunks.parquet`
-    - `uv run python -m sec_10k_rag.split_text.run`
+    - `uv run python -m sec_10k_rag.step_04_split_text.run`
     - 2,977 chunks (MSFT 938, NVDA 939, TSLA 1,100); 0 nulls; keys unique
     - length: min 6, median 1,008, max 4,021 chars; 98 chunks > 2,000 chars (single very long lines)
   - [x] `chunks` table: `PRIMARY KEY (section_id, chunk_index)`, added `report_date DATE`, `source_url TEXT`; DB re-created, checked with `\d chunks`
@@ -217,15 +257,15 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
 - [x] ✅ **4d** (2026-10-10) *Main purpose: turning each chunk's text into a 384-number vector and storing it in Postgres, so chunks can be searched by meaning.* Embed chunks (`BAAI/bge-small-en-v1.5`, sentence-transformers) and load into pgvector
   - [x] Add dep
     - `uv add sentence-transformers`
-  - [x] Stage 1: embed (code in `src/sec_10k_rag/embedding/`) → `data/processed/embedding/chunks_embedded.parquet`
-    - `uv run python -m sec_10k_rag.embedding.run`
+  - [x] Stage 1: embed (code in `src/sec_10k_rag/step_05_embedding/`) → `data/processed/embedding/chunks_embedded.parquet`
+    - `uv run python -m sec_10k_rag.step_05_embedding.run`
     - `config.py`: `Config[EmbeddingInstructions]` (`model_name`, `batch_size=64`); `load.py` reads `data/processed/chunks.parquet` (2,977 rows)
     - Model output size: `model.get_sentence_embedding_dimension()` → `384`; `model.max_seq_length` → `512`
     - `tokenize.py` + `report.py`: token length per chunk → 27 of 2,977 chunks are over 512 tokens and get cut off (min 4, median 209, max 740)
     - `vectorize.py`: `model.encode(texts, batch_size=64, normalize_embeddings=True)` → `embedding` column, `Array(Float32, 384)`, 0 nulls
     - No separate normalize step: the model already ends with a `Normalize` layer (vector length = 1 either way)
-  - [x] Stage 2: load into Postgres (code in `src/sec_10k_rag/db_load/`)
-    - `uv run python -m sec_10k_rag.db_load.run` → `loaded 2977 rows into chunks`
+  - [x] Stage 2: load into Postgres (code in `src/sec_10k_rag/step_06_db_load/`)
+    - `uv run python -m sec_10k_rag.step_06_db_load.run` → `loaded 2977 rows into chunks`
     - `convert_embedding_column_to_text(df)`: vector → pgvector text `"[0.01,-0.02,...]"` (cast to `List(String)` → `list.join(",")` → `pl.format("[{}]", ...)`)
     - `replace_rows(conn, df, "chunks")`: `TRUNCATE chunks`, then `COPY chunks (...) FROM STDIN WITH (FORMAT csv, HEADER true)` fed by `df.write_csv()` (a string, no file)
     - HNSW index: `CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops)`
@@ -286,7 +326,7 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
 - [x] **Check**: is the saved source chunk among those 10, and at what rank? (e.g. "found at rank 2" or "not found")
 - [x] **Score**: turn the 49 ranks into recall@1/3/5/10 (how often the source chunk is in the top k) and MRR (mean of 1/rank, 0 when not found). Save per-question ranks to `scores.parquet` and print the summary.
 
-Code (`src/sec_10k_rag/search_quality/lib.py`): Load + Search = `get_question_vectors` (bge-small + query prefix, reuses `embedding.vectorize`) and `find_nearest_neighbors` (pgvector `<=>`, top 10); Check = `rank_of_source` (left join on `question_id` + `section_id` + `chunk_index`); Score = `score` (recall@k + MRR). Run: `uv run python -m sec_10k_rag.search_quality.run` (default `generate_questions`: writes new questions with Groq, then scores them and saves `scores.parquet`).
+Code (`src/sec_10k_rag/step_07_search_quality/lib.py`): Load + Search = `get_question_vectors` (bge-small + query prefix, reuses `embedding.vectorize`) and `find_nearest_neighbors` (pgvector `<=>`, top 10); Check = `rank_of_source` (left join on `question_id` + `section_id` + `chunk_index`); Score = `score` (recall@k + MRR). Run: `uv run python -m sec_10k_rag.step_07_search_quality.run` (default `generate_questions`: writes new questions with Groq, then scores them and saves `scores.parquet`).
 
 #### How the check works (example)
 
@@ -345,3 +385,37 @@ Found per company: MSFT 13 of 16, NVDA 7 of 17, TSLA 11 of 16.
 Known limit: only the exact source chunk counts; the same paragraph in another year's filing counts as a miss, so the score is slightly strict.
 
 Next: improve search in build step 5 (company/year filters, hybrid search, reranking) and re-score the same questions.
+
+### Step 5 — Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores 🟡 (started 2026-10-12)
+
+Measure every change on the same 49 questions in `questions.parquet` (don't regenerate; file locked with `chmod 444`). Step 5 baseline (2026-10-12): recall@1 0.22, @3 0.39, @5 0.45, @10 0.59, MRR 0.34; not found 20 of 49; found MSFT 12/16, NVDA 6/17, TSLA 11/16.
+
+Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a `generate_questions` run at 06:02 UTC overwrote `questions.parquet` with 43 questions, so the exact 4.5 question file is lost. `questions.parquet` is now a copy of `2026_10_11_12_27_questions.parquet`: the same 49 source chunks, but the questions are worded differently. The 43-question file is kept as `questions_43_2026-10-12.parquet`. Open item: make question generation repeatable.
+
+- [x] **5a** Fix score_search so it can run alone
+  - [x] `step_07_search_quality/run.py:35`: read `ins.input_file_name` (questions.parquet), not `ins.output_file_name` (scores.parquet)
+  - [x] Re-run `uv run python -m sec_10k_rag.step_07_search_quality.run score_search` → 49 rows scored (Step 5 baseline above)
+  - [x] `start_db()` (`docker compose up --detach --wait db`) runs first in `main()`, so Postgres starts automatically
+- [ ] **5b** Filters: search only the question's company and fiscal year
+  - [ ] Add `WHERE ticker = %s AND fiscal_year = %s` to the search, using each question's own `ticker` and `fiscal_year`
+  - [ ] `SET hnsw.iterative_scan = relaxed_order` (without it, HNSW filters only ~40 candidates, so a filter can return fewer than 10 rows)
+  - [ ] Check: every question gets 10 rows back
+  - [ ] Re-score and record
+- [ ] **5c** Hybrid: keyword search + vector search
+  - [ ] Add a `tsvector` column on `chunks.text` with a GIN index (Postgres full-text search, no new package)
+  - [ ] Keyword search: top k by `ts_rank`, with the same filters as 5b
+  - [ ] Merge the vector and keyword ranks with Reciprocal Rank Fusion in Polars: `score = Σ 1 / (60 + rank)`
+    - Example: vector rank 2 + keyword rank 5 → 1/62 + 1/65 = 0.032; vector rank 1 only → 1/61 = 0.016
+  - [ ] Re-score and record
+- [ ] **5d** Reranker
+  - [ ] Take the top 30 from 5c and re-order them with the cross-encoder `BAAI/bge-reranker-base` (`sentence_transformers.CrossEncoder`); keep the top 10
+  - [ ] Re-score and record
+- [ ] **5e** Before/after scorecard
+
+  | Change | recall@1 | recall@3 | recall@5 | recall@10 | MRR |
+  |---|---|---|---|---|---|
+  | Baseline (vectors only) | 0.22 | 0.39 | 0.45 | 0.59 | 0.34 |
+  | + filters (5b) | | | | | |
+  | + hybrid (5c) | | | | | |
+  | + reranker (5d) | | | | | |
+- [ ] Checks: `uv run ruff check src tests`, `uv run pyright src tests`, `uv run pytest -q`

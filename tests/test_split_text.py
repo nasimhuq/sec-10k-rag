@@ -4,8 +4,8 @@ import datetime as dt
 
 import polars as pl
 
-from sec_10k_rag.split_text.lib import chunk_sections, drop_short_sections
-from sec_10k_rag.split_text.run import META_COLUMNS
+from sec_10k_rag.step_04_split_text.lib import chunk_sections, drop_short_sections
+from sec_10k_rag.step_04_split_text.run import META_COLUMNS
 
 TARGET: int = 1000
 

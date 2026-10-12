@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from sec_10k_rag.parsing.html_text import html_to_text
-from sec_10k_rag.parsing.sections import split_into_items
-from sec_10k_rag.parsing.sgml import extract_10k_html
+from sec_10k_rag.step_02_parsing.html_text import html_to_text
+from sec_10k_rag.step_02_parsing.sections import split_into_items
+from sec_10k_rag.step_02_parsing.sgml import extract_10k_html
 
 BUSINESS: str = "We make electric cars. " * 100  # long enough to be the real Item 1
 # A sentence that starts with "Item 1A" but is far too long to be a heading

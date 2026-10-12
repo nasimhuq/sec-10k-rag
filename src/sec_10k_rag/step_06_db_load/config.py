@@ -4,9 +4,9 @@ from collections.abc import Callable
 from enum import StrEnum, auto
 
 from sec_10k_rag.common.config import Config
-from sec_10k_rag.embedding.config import EMBEDDING_DIR
+from sec_10k_rag.step_05_embedding.config import EMBEDDING_DIR
 
-# from sec_10k_rag.embedding.config import get_load_chunks_config
+# from sec_10k_rag.step_05_embedding.config import get_load_chunks_config
 
 
 class ConfigType(StrEnum):

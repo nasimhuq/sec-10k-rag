@@ -2,26 +2,25 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-import polars as pl
-
-from sec_10k_rag.common.common import with_progress, write_to_parquet_file
-from sec_10k_rag.search_quality.config import (
+from sec_10k_rag.common.common import (
+    start_db,
+    with_progress,
+    write_to_parquet_file,
+)
+from sec_10k_rag.step_07_search_quality.config import (
     ConfigType,
     GenerateQuestionsInstructions,
     ScoreSearchInstructions,
     get_config,
 )
-from sec_10k_rag.search_quality.lib import (
+from sec_10k_rag.step_07_search_quality.lib import (
     find_nearest_neighbors,
     generate_questions,
     get_question_vectors,
     load_chunks_text_from_db,
     rank_of_source,
-    # load_questions,
     sample_chunks,
     score,
-    # score,
-    # search_all,
 )
 
 
@@ -32,15 +31,8 @@ def run_score_search() -> Path:
     if not isinstance(ins, ScoreSearchInstructions):
         raise TypeError("expected ScoreSearchInstructions")
 
-    questions_path = Path(config.processed_data_dir) / ins.output_file_name
+    questions_path = Path(config.processed_data_dir) / ins.input_file_name
     return questions_path
-
-    # questions_path = Path(config.input_data_dir) / ins.input_file_name
-    # vectors = get_question_vectors(questions_path)
-    # neighbors = find_nearest_neighbors(
-    #     vectors, db=ins.db, table=ins.chunks_table, top_k=ins.top_k
-    # )
-    # print(neighbors.shape)
 
 
 @with_progress
@@ -79,6 +71,7 @@ RUNNERS: dict[ConfigType, Callable[[], Path]] = {
 
 def main() -> None:
     print("Running search quality checks...")
+    with_progress(start_db)()
     name = sys.argv[1] if len(sys.argv) > 1 else ConfigType.GENERATE_QUESTIONS
     questions_path = RUNNERS[ConfigType(name)]()
 
@@ -100,10 +93,6 @@ def main() -> None:
         ranks, Path(config.processed_data_dir) / instructions.output_file_name
     )
     print(with_progress(score)(ranks, instructions.recall_ks))
-    # ranked = rank_of_source(question_vector_df, nearest_neighbors)
-    # print(ranked.shape)
-    # scored = score(ranked, ks=(1, 5, 10))
-    # print(scored)
 
 
 if __name__ == "__main__":

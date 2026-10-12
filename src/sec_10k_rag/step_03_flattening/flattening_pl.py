@@ -4,7 +4,7 @@ from pathlib import Path
 import polars as pl
 
 from sec_10k_rag.common.common import write_to_parquet_file
-from sec_10k_rag.flattening.flatten_pl import apply_map, convert, flatten
+from sec_10k_rag.step_03_flattening.flatten_pl import apply_map, convert, flatten
 
 RAW_DIR = Path("data/raw")
 SCRIPT_DIR = Path(__file__).parent

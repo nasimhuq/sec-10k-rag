@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from sec_10k_rag.common.common import write_to_parquet_file
-from sec_10k_rag.split_text.lib import (
+from sec_10k_rag.step_04_split_text.lib import (
     chunk_sections,
     drop_short_sections,
     load_ndjson,

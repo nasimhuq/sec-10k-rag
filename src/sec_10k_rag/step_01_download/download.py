@@ -1,6 +1,6 @@
 """Download 10-K filings and SEC JSON data for a few companies.
 
-Run with: uv run python -m sec_10k_rag.download
+Run with: uv run python -m sec_10k_rag.step_01_download.download
 """
 
 import json

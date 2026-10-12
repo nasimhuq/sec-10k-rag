@@ -2,7 +2,7 @@
 
 import re
 
-from sec_10k_rag.models import Heading, RawSection
+from sec_10k_rag.step_02_parsing.models import Heading, RawSection
 
 # Every Item a 10-K can have, in the order they appear in the filing
 ITEM_TITLES: dict[str, str] = {

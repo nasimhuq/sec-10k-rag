@@ -1,6 +1,6 @@
 """Parse every downloaded 10-K into sections and save them as JSON Lines.
 
-Run with: uv run python -m sec_10k_rag.parsing.parse
+Run with: uv run python -m sec_10k_rag.step_02_parsing.parse
 
 Everything here is a pure function except read_filing() and main(),
 which do all the reading, printing and writing.
@@ -12,10 +12,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from sec_10k_rag.models import ManifestEntry, RawSection, Section, SourceFormat
-from sec_10k_rag.parsing.html_text import html_to_text
-from sec_10k_rag.parsing.sections import split_into_items
-from sec_10k_rag.parsing.sgml import extract_10k_html
+from sec_10k_rag.step_02_parsing.models import ManifestEntry, RawSection, Section, SourceFormat
+from sec_10k_rag.step_02_parsing.html_text import html_to_text
+from sec_10k_rag.step_02_parsing.sections import split_into_items
+from sec_10k_rag.step_02_parsing.sgml import extract_10k_html
 
 RAW_DIR = Path("data/raw")
 OUT_FILE = Path("data/processed/sections.jsonl")

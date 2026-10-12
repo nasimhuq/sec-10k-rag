@@ -1,7 +1,7 @@
 import polars as pl
 from sentence_transformers import SentenceTransformer
 
-from sec_10k_rag.embedding.config import Config, EmbeddingInstructions
+from sec_10k_rag.step_05_embedding.config import Config, EmbeddingInstructions
 
 
 def vectorize(

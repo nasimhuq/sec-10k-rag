@@ -2,7 +2,7 @@
 
 import re
 
-from sec_10k_rag.models import SgmlDocument
+from sec_10k_rag.step_02_parsing.models import SgmlDocument
 
 DOCUMENT: re.Pattern[str] = re.compile(r"<DOCUMENT>(.*?)</DOCUMENT>", re.DOTALL)
 TYPE: re.Pattern[str] = re.compile(r"<TYPE>([^\n<]+)")

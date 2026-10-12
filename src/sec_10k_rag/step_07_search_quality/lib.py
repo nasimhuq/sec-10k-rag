@@ -16,10 +16,10 @@ from sec_10k_rag.common.llm_config import (
     ask_llm,
     llm_client,
 )
-from sec_10k_rag.embedding.config import ConfigType as EmbeddingConfigType
-from sec_10k_rag.embedding.config import get_config as get_embedding_config
-from sec_10k_rag.embedding.vectorize import vectorize
-from sec_10k_rag.search_quality.config import (
+from sec_10k_rag.step_05_embedding.config import ConfigType as EmbeddingConfigType
+from sec_10k_rag.step_05_embedding.config import get_config as get_embedding_config
+from sec_10k_rag.step_05_embedding.vectorize import vectorize
+from sec_10k_rag.step_07_search_quality.config import (
     CHUNK_COLUMNS,
     QUESTION_PROMPT,
     REPLY_SCHEMA,

@@ -3,8 +3,8 @@ import os
 import psycopg
 from dotenv import load_dotenv
 
-from sec_10k_rag.db_load.config import get_config
-from sec_10k_rag.db_load.libs import (
+from sec_10k_rag.step_06_db_load.config import get_config
+from sec_10k_rag.step_06_db_load.libs import (
     convert_embedding_column_to_text,
     load_embedded_chunks,
     replace_rows,

@@ -1,7 +1,7 @@
 import polars as pl
 
 from sec_10k_rag.common.common import load_parquet
-from sec_10k_rag.embedding.config import Config, EmbeddingInstructions
+from sec_10k_rag.step_05_embedding.config import Config, EmbeddingInstructions
 
 
 def load_chunks(config: Config[None | EmbeddingInstructions], file_name: str) -> pl.DataFrame:
