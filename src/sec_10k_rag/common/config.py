@@ -6,6 +6,7 @@ INPUT_DATA_DIR = ROOT_DIR / "data/raw"
 PROCESSED_DIR = ROOT_DIR / "data/processed"
 LOG_DIR = ROOT_DIR / "logs"
 TEMP_DIR = ROOT_DIR / "temp"
+LLM_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 @dataclass(frozen=True, kw_only=True)

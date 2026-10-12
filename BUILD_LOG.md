@@ -15,7 +15,7 @@ Newest entries at the bottom of each section. Checkboxes = still to do.
 | 2 | New corpus: download 10-Ks + JSON facts + annual-report PDF | 1 | ✅  |2026-10-01  | 2026-10-02|
 | 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | ✅ | 2026-10-02 |2026-10-04 |
 | 4 | Postgres + pgvector: Docker DB, tables, chunk 10-K sections, embed, load into pgvector | — | ✅ (facts load deferred) |2026-10-05 | 2026-10-10 |
-| 4.5 | New golden set (~50 Qs) for 10-K corpus + baseline eval | 1.5 | ⬜ | | |
+| 4.5 | Search quality test: 50 questions with known answers, scored before improvements | 1.5 | ✅ | 2026-10-10 | 2026-10-12 |
 | 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | ⬜ | | |
 | 6 | MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop | 2 | ⬜ | | |
 | 7 | Presentable: Streamlit UI, tests, Dockerfile, README (diagram + scorecard), demo video, GitHub | 2.5 | ⬜ | | |
@@ -277,3 +277,71 @@ Detailed notes get added here as each milestone starts (see the Progress tracker
   - [ ] Check
     - `SELECT count(*) FROM facts;` = 81,810
     - spot check: `SELECT ticker, fiscal_year, val FROM facts WHERE concept = 'Revenues' LIMIT 5;`
+
+### Step 4.5 — Search quality test: 50 questions with known answers, scored before improvements ✅ (2026-10-12)
+
+#### Scoring plan
+- [x] **Load** `data/processed/search_quality/questions.parquet` (49 questions, each with its answer and its source chunk `section_id` + `chunk_index`).
+- [x] **Search**: turn each question into a vector with bge-small (with the query prefix), then ask Postgres for the 10 nearest chunks, ranked 1–10.
+- [x] **Check**: is the saved source chunk among those 10, and at what rank? (e.g. "found at rank 2" or "not found")
+- [x] **Score**: turn the 49 ranks into recall@1/3/5/10 (how often the source chunk is in the top k) and MRR (mean of 1/rank, 0 when not found). Save per-question ranks to `scores.parquet` and print the summary.
+
+Code (`src/sec_10k_rag/search_quality/lib.py`): Load + Search = `get_question_vectors` (bge-small + query prefix, reuses `embedding.vectorize`) and `find_nearest_neighbors` (pgvector `<=>`, top 10); Check = `rank_of_source` (left join on `question_id` + `section_id` + `chunk_index`); Score = `score` (recall@k + MRR). Run: `uv run python -m sec_10k_rag.search_quality.run` (default `generate_questions`: writes new questions with Groq, then scores them and saves `scores.parquet`).
+
+#### How the check works (example)
+
+Each question was written from one chunk, and questions.parquet stores that chunk's id (`section_id` + `chunk_index`). Search returns the top k chunks for each question. A question passes when its source id is among its own top k rows. The id is the table's primary key, so the same id means the same chunk text.
+
+The neighbor rows below are from a real run; the source ids in Table 1 are made up for the example.
+
+**Table 1: questions.parquet** (where each question came from)
+
+| question_id | section_id | chunk_index |
+|---|---|---|
+| 0 | MSFT-2025-item1A | 28 |
+| 1 | NVDA-2024-item1A | 6 |
+| 2 | TSLA-2025-item7 | 1 |
+
+**Table 2: nearest neighbors** (top 5 per question from Postgres `chunks`)
+
+| question_id | rank | section_id | chunk_index |
+|---|---|---|---|
+| 0 | 1 | **MSFT-2025-item1A** | **28** |
+| 0 | 2 | MSFT-2024-item1A | 29 |
+| 1 | 1 | NVDA-2025-item1A | 6 |
+| 1 | 2 | **NVDA-2024-item1A** | **6** |
+| 2 | 1 | TSLA-2023-item7 | 1 |
+| 2 | 2 | TSLA-2024-item7 | 1 |
+| 2 | 3–5 | (no TSLA-2025-item7 #1) | |
+
+**Check:** for each `question_id`, look in its top 5 rows for the same `section_id` + `chunk_index` (`rank_of_source`, one left join).
+
+| question_id | found at rank | in top 5? |
+|---|---|---|
+| 0 | 1 | ✅ |
+| 1 | 2 | ✅ |
+| 2 | not found | ❌ |
+
+**Score:**
+- recall@k = share of questions whose source chunk is in the top k. Here recall@1 = 1/3 = 0.33 (only Q0 at rank 1), recall@5 = 2/3 = 0.67.
+- MRR = average of 1/rank, 0 if not found. Here (1/1 + 1/2 + 0) / 3 = 0.50.
+
+**Known limit:** Q2 shows it. Search found the same paragraph in the 2023 and 2024 filings but not the 2025 one the question came from, so it counts as a miss. The score is slightly strict.
+
+#### Baseline result (2026-10-12)
+
+Measured: 49 questions from `questions.parquet`, top 10 from Postgres `chunks`, bge-small-en-v1.5 with the query prefix, no filters, no reranking.
+
+| recall@1 | recall@3 | recall@5 | recall@10 | MRR |
+|---|---|---|---|---|
+| 0.24 | 0.43 | 0.51 | 0.63 | 0.37 |
+
+Not found in top 10: 18 of 49.
+
+Ranks: 1 ×12, 2 ×8, 3 ×1, 4 ×2, 5 ×2, 6 ×1, 8 ×2, 10 ×3, not found ×18.
+
+Found per company: MSFT 13 of 16, NVDA 7 of 17, TSLA 11 of 16.
+
+Known limit: only the exact source chunk counts; the same paragraph in another year's filing counts as a miss, so the score is slightly strict.
+
+Next: improve search in build step 5 (company/year filters, hybrid search, reranking) and re-score the same questions.

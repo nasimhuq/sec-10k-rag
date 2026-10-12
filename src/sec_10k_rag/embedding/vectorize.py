@@ -4,13 +4,17 @@ from sentence_transformers import SentenceTransformer
 from sec_10k_rag.embedding.config import Config, EmbeddingInstructions
 
 
-def vectorize(config: Config[None | EmbeddingInstructions], df: pl.DataFrame) -> pl.DataFrame:
+def vectorize(
+    config: Config[None | EmbeddingInstructions],
+    df: pl.DataFrame,
+    text_column_name: str = "text",
+) -> pl.DataFrame:
     if config.instructions is None:
         raise ValueError("vectorize needs EmbeddingInstructions")
 
     model = SentenceTransformer(config.instructions.model_name)
     embeddings = model.encode(  # pyright: ignore[reportUnknownMemberType]
-        df["text"].to_list(),
+        df[text_column_name].to_list(),
         batch_size=config.instructions.batch_size,
         normalize_embeddings=True,
         convert_to_numpy=True,

@@ -43,7 +43,9 @@ def get_tokenize_config() -> Config[EmbeddingInstructions]:
     )
 
 
-CONFIG_FACTORIES: dict[ConfigType, Callable[[], Config[None | EmbeddingInstructions]]] = {
+CONFIG_FACTORIES: dict[
+    ConfigType, Callable[[], Config[None | EmbeddingInstructions]]
+] = {
     ConfigType.LOAD_CHUNKS: get_load_chunks_config,
     ConfigType.TOKENIZE: get_tokenize_config,
     ConfigType.VECTORIZE: get_default_config,
