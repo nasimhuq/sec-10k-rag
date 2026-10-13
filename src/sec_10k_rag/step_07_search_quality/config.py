@@ -38,6 +38,7 @@ REPLY_SCHEMA = pl.Struct(
 )
 LLM_MODEL_NAME = "openai/gpt-oss-120b"
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+FILTER_COLUMNS = ("ticker", "fiscal_year")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -79,6 +80,7 @@ class ScoreSearchInstructions:
     output_file_name: str = SCORES_FILE
     chunks_table: str = PG_TABLE
     recall_ks: tuple[int, ...] = (1, 3, 5, 10)
+    filter_columns: tuple[str, ...] = FILTER_COLUMNS
 
 
 class ConfigType(StrEnum):

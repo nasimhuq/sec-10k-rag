@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from functools import wraps
 from itertools import cycle
 from pathlib import Path
@@ -13,10 +14,8 @@ import polars as pl
 
 from sec_10k_rag.common.config import DB_SERVICE, ROOT_DIR
 
-# from sentence_transformers import SentenceTransformer
-
-# from sec_10k_rag.common.config import Config
-
+BACKUP_STAMP = "%Y_%m_%d_%H_%M_%S"
+BACKUP_DIR_NAME = "backup"
 SPINNER_FRAMES = "⠀⠄⠆⠇⠇⠗⠷⠿"
 SPINNER_INTERVAL_S = 0.1
 CLEAR_TO_EOL = "\033[K"
@@ -38,6 +37,17 @@ class _RunningCall:
 _progress_stack: list[_RunningCall] = []
 
 
+def backup_file(path: Path) -> Path | None:
+    if not path.exists():
+        return None
+    changed = datetime.fromtimestamp(path.stat().st_mtime)
+    backup_dir = path.parent / BACKUP_DIR_NAME
+    backup_dir.mkdir(exist_ok=True)
+    backup = backup_dir / f"{changed.strftime(BACKUP_STAMP)}_{path.name}"
+    path.rename(backup)
+    return backup
+
+
 def start_db(service: str = DB_SERVICE) -> None:
     subprocess.run(
         ["docker", "compose", "up", "--detach", "--wait", service],
@@ -48,9 +58,10 @@ def start_db(service: str = DB_SERVICE) -> None:
 
 def write_to_parquet_file(df: pl.DataFrame, parquet_file_name: Path) -> None:
     """Delete existing facts file and write new facts."""
-    if parquet_file_name.exists():
-        parquet_file_name.unlink()
-        print(f"Deleted existing facts file: {parquet_file_name}")
+
+    backup = backup_file(parquet_file_name)
+    if backup:
+        print(f"Backed up existing file to {backup}")
 
     t = time.perf_counter()
     print(f"Writing facts to {parquet_file_name}...")

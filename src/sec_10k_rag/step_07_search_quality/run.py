@@ -85,9 +85,14 @@ def main() -> None:
         question_vector_df,
         db=instructions.db,
         table=instructions.chunks_table,
-        top_k=10,
+        top_k=instructions.top_k,
+        filter_columns=instructions.filter_columns,
     )
-
+    expected_rows = question_vector_df.height * instructions.top_k
+    if nearest_neighbors.height != expected_rows:
+        raise ValueError(
+            f"expected {expected_rows} rows, got {nearest_neighbors.height}"
+        )
     ranks = with_progress(rank_of_source)(question_vector_df, nearest_neighbors)
     with_progress(write_to_parquet_file)(
         ranks, Path(config.processed_data_dir) / instructions.output_file_name

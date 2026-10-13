@@ -396,11 +396,14 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
   - [x] `step_07_search_quality/run.py:35`: read `ins.input_file_name` (questions.parquet), not `ins.output_file_name` (scores.parquet)
   - [x] Re-run `uv run python -m sec_10k_rag.step_07_search_quality.run score_search` → 49 rows scored (Step 5 baseline above)
   - [x] `start_db()` (`docker compose up --detach --wait db`) runs first in `main()`, so Postgres starts automatically
-- [ ] **5b** Filters: search only the question's company and fiscal year
-  - [ ] Add `WHERE ticker = %s AND fiscal_year = %s` to the search, using each question's own `ticker` and `fiscal_year`
-  - [ ] `SET hnsw.iterative_scan = relaxed_order` (without it, HNSW filters only ~40 candidates, so a filter can return fewer than 10 rows)
-  - [ ] Check: every question gets 10 rows back
-  - [ ] Re-score and record
+- [x] **5b** Filters: search only the question's company and fiscal year
+  - [x] `step_07_search_quality/config.py`: add `filter_columns: tuple[str, ...] = ("ticker", "fiscal_year")` to `ScoreSearchInstructions` (`()` = baseline, so every scorecard row can be re-run)
+  - [x] `lib/search.py` (lib.py split into a `lib/` package: db, questions, search, scoring) `find_nearest_neighbors`: build the `WHERE` from `filter_columns`, passing each question's own `ticker` and `fiscal_year` (already kept by `get_question_vectors`)
+    - Example: `SELECT section_id, chunk_index FROM chunks WHERE ticker = %s AND fiscal_year = %s ORDER BY embedding <=> %s::vector LIMIT %s`
+  - [x] Same connection: `SET hnsw.iterative_scan = strict_order` (without it, HNSW filters only ~40 candidates, so a filter can return fewer than 10 rows; `strict_order`, not `relaxed_order`, keeps results in exact distance order so rank and MRR stay right)
+  - [x] `run.py`: pass `ins.filter_columns`; use `ins.top_k` instead of hard-coded `top_k=10`
+  - [x] Check: every question gets 10 rows back: `nearest_neighbors.height == questions × top_k` (49 × 10 = 490; a `group_by` would miss a question with 0 rows)
+  - [x] Re-score and record (2026-10-12): recall@1 0.43, @3 0.57, @5 0.65, @10 0.80, MRR 0.53; not found 10 of 49 (was 20); found MSFT 16/16, NVDA 11/17, TSLA 12/16; 28 questions ranked higher, none lower. Baseline scores kept in `search_quality/backup/2026_10_12_12_11_58_scores.parquet`
 - [ ] **5c** Hybrid: keyword search + vector search
   - [ ] Add a `tsvector` column on `chunks.text` with a GIN index (Postgres full-text search, no new package)
   - [ ] Keyword search: top k by `ts_rank`, with the same filters as 5b
@@ -415,7 +418,7 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
   | Change | recall@1 | recall@3 | recall@5 | recall@10 | MRR |
   |---|---|---|---|---|---|
   | Baseline (vectors only) | 0.22 | 0.39 | 0.45 | 0.59 | 0.34 |
-  | + filters (5b) | | | | | |
+  | + filters (5b) | 0.43 | 0.57 | 0.65 | 0.80 | 0.53 |
   | + hybrid (5c) | | | | | |
   | + reranker (5d) | | | | | |
 - [ ] Checks: `uv run ruff check src tests`, `uv run pyright src tests`, `uv run pytest -q`
