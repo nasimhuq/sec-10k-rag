@@ -16,7 +16,7 @@ Newest entries at the bottom of each section. Checkboxes = still to do.
 | 3 | Loaders: .html, .txt, .pdf, .docx, .json, JSON→.parquet; split by 10-K Item with metadata (company, year, section) | 3 | ✅ | 2026-10-02 |2026-10-04 |
 | 4 | Postgres + pgvector: Docker DB, tables, chunk 10-K sections, embed, load into pgvector | — | ✅ (facts load deferred) |2026-10-05 | 2026-10-10 |
 | 4.5 | Search quality test: 50 questions with known answers, scored before improvements | 1.5 | ✅ | 2026-10-10 | 2026-10-12 |
-| 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | 🟡 |2026-10-12 | |
+| 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | ✅ |2026-10-12 | 2026-10-13 |
 | 6 | MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop | 2 | ⬜ | | |
 | 7 | Presentable: Streamlit UI, tests, Dockerfile, README (diagram + scorecard), demo video, GitHub | 2.5 | ⬜ | | |
 | | **MVP total** | **≈ 13–14** | | | |
@@ -386,7 +386,7 @@ Known limit: only the exact source chunk counts; the same paragraph in another y
 
 Next: improve search in build step 5 (company/year filters, hybrid search, reranking) and re-score the same questions.
 
-### Step 5 — Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores 🟡 (started 2026-10-12)
+### Step 5 — Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores ✅ (2026-10-12 to 2026-10-13)
 
 Measure every change on the same 49 questions in `questions.parquet` (don't regenerate; file locked with `chmod 444`). Step 5 baseline (2026-10-12): recall@1 0.22, @3 0.39, @5 0.45, @10 0.59, MRR 0.34; not found 20 of 49; found MSFT 12/16, NVDA 6/17, TSLA 11/16.
 
@@ -448,12 +448,14 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
         -> LLM (/ask):         reads the top few, writes the answer
       ```
   - [x] Re-score and record (2026-10-13): recall@1 0.47, @3 0.69, @5 0.76, @10 0.80, MRR 0.59 (vs 5c: +0.02 / +0.06 / +0.10 / +0.02 / +0.04); not found 10 of 49 (was 11). 5c scores kept in `search_quality/backup/2026_10_13_00_07_43_scores.parquet`
-- [ ] **5e** Before/after scorecard
+- [x] **5e** Before/after scorecard (49 questions; files in `data/processed/search_quality/`)
 
-  | Change | recall@1 | recall@3 | recall@5 | recall@10 | MRR |
-  |---|---|---|---|---|---|
-  | Baseline (vectors only) | 0.22 | 0.39 | 0.45 | 0.59 | 0.34 |
-  | + filters (5b) | 0.43 | 0.57 | 0.65 | 0.80 | 0.53 |
-  | + hybrid (5c) | 0.45 | 0.63 | 0.65 | 0.78 | 0.55 |
-  | + reranker (5d) | 0.47 | 0.69 | 0.76 | 0.80 | 0.59 |
-- [ ] Checks: `uv run ruff check src tests`, `uv run pyright src tests`, `uv run pytest -q`
+  | Change | recall@1 | recall@3 | recall@5 | recall@10 | MRR | Scores file |
+  |---|---|---|---|---|---|---|
+  | Baseline (vectors only) | 0.22 | 0.39 | 0.45 | 0.59 | 0.34 | `backup/2026_10_12_12_11_58_scores.parquet` |
+  | + filters (5b) | 0.43 | 0.57 | 0.65 | 0.80 | 0.53 | `backup/2026_10_12_15_29_02_scores.parquet` |
+  | + hybrid (5c) | 0.45 | 0.63 | 0.65 | 0.78 | 0.55 | `backup/2026_10_13_00_07_43_scores.parquet` |
+  | + reranker (5d) | 0.47 | 0.69 | 0.76 | 0.80 | 0.59 | `scores.parquet` |
+
+  Result: recall@5 0.45 → 0.76, MRR 0.34 → 0.59. Filters gave the biggest jump; the reranker helped most at @3 and @5.
+- [x] Checks: `uv run ruff check src tests` → passed; `uv run pyright src tests` → 0 errors; `uv run pytest -q` → 11 passed
