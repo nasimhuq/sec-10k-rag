@@ -30,15 +30,20 @@ ITEM_TITLES: dict[str, str] = {
     "15": "Exhibits and Financial Statement Schedules",
     "16": "Form 10-K Summary",
 }
-ITEM_RANK: dict[str, int] = {item: rank for rank, item in enumerate(ITEM_TITLES)}
+ITEM_RANK: dict[str, int] = {
+    item: rank for rank, item in enumerate(ITEM_TITLES)
+}
 
-# A heading line: "Item 1A. Risk Factors", "ITEM 7 | MANAGEMENT'S ...", "Item 1C:"
+# A heading line: "Item 1A. Risk Factors", "ITEM 7 | MANAGEMENT'S ...",
+# "Item 1C:"
 # Longer item numbers come first in the group, so "1A" wins over "1".
 HEADING: re.Pattern[str] = re.compile(
     r"^item\s+(1A|1B|1C|1|2|3|4|5|6|7A|7|8|9A|9B|9C|9|10|11|12|13|14|15|16)\b",
     re.IGNORECASE | re.MULTILINE,
 )
-MAX_HEADING_CHARS = 150  # longer lines are sentences that mention an Item, not headings
+MAX_HEADING_CHARS = (
+    150  # longer lines are sentences that mention an Item, not headings
+)
 MIN_BUSINESS_CHARS = 1_000  # Item 1 (Business) is always at least this long
 
 
@@ -53,7 +58,11 @@ def cut_sections(text: str, headings: list[Heading]) -> list[RawSection]:
     """Cut the text at each heading; each piece runs to the next heading."""
     ends: list[int] = [h.start for h in headings[1:]] + [len(text)]
     return [
-        RawSection(item=h.item, title=ITEM_TITLES[h.item], text=text[h.start : end].strip())
+        RawSection(
+            item=h.item,
+            title=ITEM_TITLES[h.item],
+            text=text[h.start : end].strip(),
+        )
         for h, end in zip(headings, ends, strict=True)
     ]
 
@@ -74,14 +83,19 @@ def find_headings(text: str) -> list[Heading]:
 
 
 def body_start(headings: list[Heading]) -> int:
-    """Index of the real "Item 1" heading, which comes right after the table of contents.
+    """Index of the real "Item 1" heading, right after the table of contents.
 
     In the table of contents, "Item 1" is followed a line later by "Item 1A".
     In the body, "Item 1. Business" is followed by pages of text.
     """
     for i, heading in enumerate(headings):
-        next_start: int = headings[i + 1].start if i + 1 < len(headings) else 10**12
-        if heading.item == "1" and next_start - heading.start >= MIN_BUSINESS_CHARS:
+        next_start: int = (
+            headings[i + 1].start if i + 1 < len(headings) else 10**12
+        )
+        if (
+            heading.item == "1"
+            and next_start - heading.start >= MIN_BUSINESS_CHARS
+        ):
             return i
     return 0
 

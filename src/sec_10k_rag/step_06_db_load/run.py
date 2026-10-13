@@ -23,14 +23,20 @@ def main() -> None:
         user=os.environ["POSTGRES_USER"],
         password=os.environ["POSTGRES_PASSWORD"],
     ) as conn:
-        replace_rows(conn, text_df, "chunks")  # replace with actual table name and DataFrame
+        replace_rows(
+            conn, text_df, "chunks"
+        )  # replace with actual table name and DataFrame
         conn.execute(
             "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
             "ON chunks USING hnsw (embedding vector_cosine_ops)"
         )
-        row = conn.execute("SELECT count(*), count(embedding) FROM chunks").fetchone()
+        row = conn.execute(
+            "SELECT count(*), count(embedding) FROM chunks"
+        ).fetchone()
         if row is None or row[0] != text_df.height or row[1] != text_df.height:
-            raise ValueError(f"load check failed: {row=}, expected {text_df.height}")
+            raise ValueError(
+                f"load check failed: {row=}, expected {text_df.height}"
+            )
         print(f"loaded {row[0]} rows into chunks")
 
 

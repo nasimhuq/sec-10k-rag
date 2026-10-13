@@ -81,6 +81,9 @@ class ScoreSearchInstructions:
     chunks_table: str = PG_TABLE
     recall_ks: tuple[int, ...] = (1, 3, 5, 10)
     filter_columns: tuple[str, ...] = FILTER_COLUMNS
+    hybrid: bool = True  # False = vectors only (5b)
+    candidate_k: int = 30  # rows taken from each search before fusing
+    rrf_k: int = 60
 
 
 class ConfigType(StrEnum):

@@ -5,7 +5,9 @@ from sec_10k_rag.common.config import Config
 from sec_10k_rag.step_05_embedding.config import EmbeddingInstructions
 
 
-def tokenize(config: Config[None | EmbeddingInstructions], df: pl.DataFrame) -> pl.DataFrame:
+def tokenize(
+    config: Config[None | EmbeddingInstructions], df: pl.DataFrame
+) -> pl.DataFrame:
     if config.instructions is None:
         raise ValueError("tokenize needs EmbeddingInstructions")
 

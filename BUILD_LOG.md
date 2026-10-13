@@ -404,12 +404,22 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
   - [x] `run.py`: pass `ins.filter_columns`; use `ins.top_k` instead of hard-coded `top_k=10`
   - [x] Check: every question gets 10 rows back: `nearest_neighbors.height == questions × top_k` (49 × 10 = 490; a `group_by` would miss a question with 0 rows)
   - [x] Re-score and record (2026-10-12): recall@1 0.43, @3 0.57, @5 0.65, @10 0.80, MRR 0.53; not found 10 of 49 (was 20); found MSFT 16/16, NVDA 11/17, TSLA 12/16; 28 questions ranked higher, none lower. Baseline scores kept in `search_quality/backup/2026_10_12_12_11_58_scores.parquet`
-- [ ] **5c** Hybrid: keyword search + vector search
-  - [ ] Add a `tsvector` column on `chunks.text` with a GIN index (Postgres full-text search, no new package)
-  - [ ] Keyword search: top k by `ts_rank`, with the same filters as 5b
-  - [ ] Merge the vector and keyword ranks with Reciprocal Rank Fusion in Polars: `score = Σ 1 / (60 + rank)`
+- [x] **5c** Hybrid: keyword search + vector search
+  - [x] Add a `tsvector` column on `chunks.text` with a GIN index (Postgres full-text search, no new package)
+    - `text_search tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED` + `CREATE INDEX chunks_text_search_gin ON chunks USING gin (text_search)`; run once on the live DB (2,977 rows filled); column and index added to `db/init/002_tables.sql`. Postgres fills it itself, and db_load's COPY skips generated columns
+  - [x] Keyword search: top k by `ts_rank`, with the same filters as 5b
+    - `lib/search.py` `keyword_query` + `find_keyword_matches` (params: question, ticker, fiscal_year, k)
+    - `plainto_tsquery` ANDs every word, so a full question matches almost nothing; `replace(plainto_tsquery('english', %s)::text, '&', '|')::tsquery` turns it into OR
+      - Example: `'revenu' & 'tesla' & '2024'` → `'revenu' | 'tesla' | '2024'`
+    - `nearest_for_one` now builds its frame with explicit types (`section_id` String, `chunk_index` Int64): an empty result otherwise gets `Null` columns and `pl.concat` fails
+    - Check: all 49 questions got 30 keyword rows
+  - [x] Merge the vector and keyword ranks with Reciprocal Rank Fusion in Polars: `score = Σ 1 / (60 + rank)`
+    - `lib/search.py` `fuse_ranks`: top 30 from each search, sum per chunk, sort (ties by `section_id`, `chunk_index`), keep top 10 → 490 rows
     - Example: vector rank 2 + keyword rank 5 → 1/62 + 1/65 = 0.032; vector rank 1 only → 1/61 = 0.016
-  - [ ] Re-score and record
+  - [x] Wire into `run.py` + `config.py` (`candidate_k = 30`, `rrf_k = 60`, `hybrid = True`; `False` = 5b)
+    - `lib/search.py` `search_chunks(vectors, ins)`: `hybrid=False` → one `find_nearest_neighbors` call (5b); `True` → vector top 30 + keyword top 30 → `fuse_ranks` → top 10. `run.py` calls `search_chunks`; the 490-row check stays
+    - Re-run any scorecard row by config only: baseline `filter_columns=(), hybrid=False`; 5b `hybrid=False`; 5c defaults
+  - [x] Re-score with `run.py` and record (2026-10-13; same as the notebook): recall@1 0.45, @3 0.63, @5 0.65, @10 0.78, MRR 0.55 (vs 5b: +0.02 / +0.06 / 0 / −0.02 / +0.02; one question dropped out of the top 10). 5b scores kept in `search_quality/backup/2026_10_12_15_29_02_scores.parquet`
 - [ ] **5d** Reranker
   - [ ] Take the top 30 from 5c and re-order them with the cross-encoder `BAAI/bge-reranker-base` (`sentence_transformers.CrossEncoder`); keep the top 10
   - [ ] Re-score and record
@@ -419,6 +429,6 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
   |---|---|---|---|---|---|
   | Baseline (vectors only) | 0.22 | 0.39 | 0.45 | 0.59 | 0.34 |
   | + filters (5b) | 0.43 | 0.57 | 0.65 | 0.80 | 0.53 |
-  | + hybrid (5c) | | | | | |
+  | + hybrid (5c) | 0.45 | 0.63 | 0.65 | 0.78 | 0.55 |
   | + reranker (5d) | | | | | |
 - [ ] Checks: `uv run ruff check src tests`, `uv run pyright src tests`, `uv run pytest -q`

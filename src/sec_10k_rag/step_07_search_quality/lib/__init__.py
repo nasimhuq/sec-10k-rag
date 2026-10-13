@@ -1,7 +1,13 @@
 from .db import load_chunks_text_from_db
 from .questions import generate_questions, sample_chunks
 from .scoring import rank_of_source, score
-from .search import find_nearest_neighbors, get_question_vectors
+from .search import (
+    find_keyword_matches,
+    find_nearest_neighbors,
+    fuse_ranks,
+    get_question_vectors,
+    search_chunks,
+)
 
 __all__ = [
     "find_nearest_neighbors",
@@ -11,4 +17,7 @@ __all__ = [
     "rank_of_source",
     "sample_chunks",
     "score",
+    "find_keyword_matches",
+    "fuse_ranks",
+    "search_chunks",
 ]

@@ -6,14 +6,28 @@ import warnings
 from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 
 # Tags that start a new line when the page is rendered
-BLOCK_TAGS: list[str] = ["p", "div", "tr", "li", "table", "h1", "h2", "h3", "h4", "h5", "h6"]
+BLOCK_TAGS: list[str] = [
+    "p",
+    "div",
+    "tr",
+    "li",
+    "table",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+]
 HIDDEN_STYLE: re.Pattern[str] = re.compile(r"display:\s*none", re.IGNORECASE)
 # Page furniture repeated on every printed page
-NOISE_LINE: re.Pattern[str] = re.compile(r"^(\d{1,3}|table of contents)$", re.IGNORECASE)
+NOISE_LINE: re.Pattern[str] = re.compile(
+    r"^(\d{1,3}|table of contents)$", re.IGNORECASE
+)
 
 
 def html_to_text(html: str | bytes) -> str:
-    """HTML of a 10-K -> plain text with one block (paragraph, table row) per line.
+    """HTML of a 10-K -> plain text, one block (paragraph, table row) per line.
 
     BeautifulSoup edits its tree in place, so this function builds its own
     tree, edits it, and throws it away. Callers only see input -> output.
@@ -43,7 +57,9 @@ def html_to_text(html: str | bytes) -> str:
 def clean_text(raw: str) -> str:
     """Clean every line, then drop empty lines and page furniture."""
     lines: list[str] = [clean_line(line) for line in raw.splitlines()]
-    return "\n".join(line for line in lines if line and not NOISE_LINE.match(line))
+    return "\n".join(
+        line for line in lines if line and not NOISE_LINE.match(line)
+    )
 
 
 def clean_line(line: str) -> str:

@@ -12,8 +12,13 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from sec_10k_rag.step_02_parsing.models import ManifestEntry, RawSection, Section, SourceFormat
 from sec_10k_rag.step_02_parsing.html_text import html_to_text
+from sec_10k_rag.step_02_parsing.models import (
+    ManifestEntry,
+    RawSection,
+    Section,
+    SourceFormat,
+)
 from sec_10k_rag.step_02_parsing.sections import split_into_items
 from sec_10k_rag.step_02_parsing.sgml import extract_10k_html
 
@@ -28,7 +33,7 @@ def load_manifest(manifest_json: bytes) -> list[ManifestEntry]:
 
 
 def to_entry(row: dict[str, Any]) -> ManifestEntry:
-    """One raw JSON row -> a ManifestEntry, converting each field to its real type.
+    """One raw JSON row -> a ManifestEntry, each field cast to its real type.
 
     A missing field raises KeyError; a bad number or date raises ValueError.
     """
@@ -57,7 +62,9 @@ def parse_txt_filing(entry: ManifestEntry, submission: str) -> list[Section]:
 
 
 def tag_sections(
-    entry: ManifestEntry, raw_sections: list[RawSection], source_format: SourceFormat
+    entry: ManifestEntry,
+    raw_sections: list[RawSection],
+    source_format: SourceFormat,
 ) -> list[Section]:
     """Attach company, year and source details to each raw section."""
     url: str = entry.html_url if source_format == "html" else entry.txt_url
@@ -85,11 +92,18 @@ def same_items(a: list[Section], b: list[Section]) -> bool:
     return [s.item for s in a] == [s.item for s in b]
 
 
-def format_report(entry: ManifestEntry, sections: list[Section], match: bool) -> str:
+def format_report(
+    entry: ManifestEntry, sections: list[Section], match: bool
+) -> str:
     """A readable summary of one filing: its Items and their sizes."""
     status: str = "match" if match else "MISMATCH"
-    header: str = f"{entry.ticker} {entry.fiscal_year}: {len(sections)} sections, "
-    rows: list[str] = [f"    Item {s.item:<3} {s.n_chars:>9,} chars  {s.title}" for s in sections]
+    header: str = (
+        f"{entry.ticker} {entry.fiscal_year}: {len(sections)} sections, "
+    )
+    rows: list[str] = [
+        f"    Item {s.item:<3} {s.n_chars:>9,} chars  {s.title}"
+        for s in sections
+    ]
     return "\n".join([header + f"html vs txt {status}", *rows])
 
 
@@ -99,15 +113,22 @@ def to_jsonl(sections: list[Section]) -> str:
 
 
 def section_to_json(section: Section) -> str:
-    """One Section -> one line of JSON. default=str writes dates as "2025-01-26"."""
+    """One Section -> one line of JSON.
+
+    default=str writes dates as "2025-01-26".
+    """
     return json.dumps(asdict(section), default=str, ensure_ascii=False)
 
 
-def parse_filing(entry: ManifestEntry, html: bytes, submission: str) -> tuple[list[Section], str]:
+def parse_filing(
+    entry: ManifestEntry, html: bytes, submission: str
+) -> tuple[list[Section], str]:
     """Both files of one filing -> its sections (from the HTML) and a report."""
     from_html: list[Section] = parse_html_filing(entry, html)
     from_txt: list[Section] = parse_txt_filing(entry, submission)
-    report: str = format_report(entry, from_html, same_items(from_html, from_txt))
+    report: str = format_report(
+        entry, from_html, same_items(from_html, from_txt)
+    )
     return from_html, report
 
 
@@ -122,7 +143,7 @@ def read_filing(entry: ManifestEntry) -> tuple[bytes, str]:
 
 
 def main() -> None:
-    """Parse every filing in data/raw, print a report for each, and write sections.jsonl. (I/O)"""
+    """Parse each filing in data/raw, report it, write sections.jsonl. (I/O)"""
     sections: list[Section] = []
     for manifest_path in sorted(RAW_DIR.glob("*/manifest.json")):
         for entry in load_manifest(manifest_path.read_bytes()):

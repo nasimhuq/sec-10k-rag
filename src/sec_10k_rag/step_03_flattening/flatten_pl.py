@@ -22,11 +22,15 @@ def to_expr(col: str, spec: dict[str, str | None]) -> pl.Expr:
 
 def convert(df: pl.DataFrame, cfg: pl.DataFrame) -> pl.DataFrame:
     """Apply every rule in `conversion` in one with_columns call."""
-    return df.with_columns([to_expr(col, spec) for col, spec in cfg["conversion"][0].items()])
+    return df.with_columns(
+        [to_expr(col, spec) for col, spec in cfg["conversion"][0].items()]
+    )
 
 
 def apply_map(df: pl.DataFrame, cfg: pl.DataFrame) -> pl.DataFrame:
-    """Rename level columns, drop leftover levels and listed columns, keep allowed rows."""
+    """Rename level columns, drop leftover levels and listed columns,
+    keep allowed rows.
+    """
     df = df.rename(cfg["rename_columns"][0], strict=False).drop(
         cs.starts_with(LEVEL_PREFIX), *cfg["drop_columns"][0], strict=False
     )
@@ -36,15 +40,23 @@ def apply_map(df: pl.DataFrame, cfg: pl.DataFrame) -> pl.DataFrame:
 
 
 def flatten(df: pl.DataFrame) -> pl.DataFrame:
-    """Each JSON level's keys become a __colN column; each item of the first list is a row."""
+    """Each JSON level's keys become a __colN column.
+
+    Each item of the first list is a row.
+    """
     depth = 1
     while df.select(cs.nested()).width > 0:
         df = df.unpivot(
-            cs.nested(), index=~cs.nested(), variable_name=f"{LEVEL_PREFIX}{depth}", value_name=NODE
+            cs.nested(),
+            index=~cs.nested(),
+            variable_name=f"{LEVEL_PREFIX}{depth}",
+            value_name=NODE,
         ).drop_nulls(NODE)
         if df.schema[NODE] == pl.List:
             df = df.explode(NODE, empty_as_null=False).unnest(NODE)
-            return df.unnest(cs.struct(), separator="_")  # sub -> sub_final, sub_next
+            return df.unnest(
+                cs.struct(), separator="_"
+            )  # sub -> sub_final, sub_next
         df = df.unnest(NODE)
         depth += 1
     return df

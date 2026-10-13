@@ -10,8 +10,11 @@ CREATE TABLE chunks (
     item TEXT,
     title TEXT,
     text TEXT NOT NULL,
-    embedding VECTOR(384)
+    embedding VECTOR(384),
+    text_search tsvector
+        GENERATED ALWAYS AS (to_tsvector('english', text)) STORED
 );
+CREATE INDEX chunks_text_search_gin ON chunks USING gin (text_search);
 CREATE TABLE facts (
   cik TEXT, 
   entity_name TEXT, 

@@ -1,10 +1,13 @@
-"""Tests for splitting 10-K sections into chunks, on small hand-made sections."""
+"""Tests for splitting 10-K sections into chunks, on small made-up sections."""
 
 import datetime as dt
 
 import polars as pl
 
-from sec_10k_rag.step_04_split_text.lib import chunk_sections, drop_short_sections
+from sec_10k_rag.step_04_split_text.lib import (
+    chunk_sections,
+    drop_short_sections,
+)
 from sec_10k_rag.step_04_split_text.run import META_COLUMNS
 
 TARGET: int = 1000
@@ -32,12 +35,16 @@ def make_sections(texts: dict[str, str]) -> pl.DataFrame:
 
 
 def chunk(texts: dict[str, str]) -> pl.DataFrame:
-    return chunk_sections(make_sections(texts), target_chars=TARGET, meta_columns=META_COLUMNS)
+    return chunk_sections(
+        make_sections(texts), target_chars=TARGET, meta_columns=META_COLUMNS
+    )
 
 
 def test_drop_short_sections_keeps_only_long_enough() -> None:
     df = make_sections({"A-item4": "Not applicable.", "A-item7": "x" * 200})
-    assert drop_short_sections(df, min_chars=150)["section_id"].to_list() == ["A-item7"]
+    assert drop_short_sections(df, min_chars=150)["section_id"].to_list() == [
+        "A-item7"
+    ]
 
 
 def test_short_section_is_one_chunk() -> None:
@@ -50,7 +57,10 @@ def test_lines_are_packed_by_start_position_and_never_cut() -> None:
     # Lines start at 0, 601, 902 (bucket 0) and 1403, 1804 (bucket 1)
     lines = ["a" * 600, "b" * 300, "c" * 500, "d" * 400, "e" * 700]
     chunks = chunk({"A-item7": "\n".join(lines)})
-    assert chunks["text"].to_list() == ["\n".join(lines[:3]), "\n".join(lines[3:])]
+    assert chunks["text"].to_list() == [
+        "\n".join(lines[:3]),
+        "\n".join(lines[3:]),
+    ]
 
 
 def test_blank_and_whitespace_only_lines_are_dropped() -> None:
@@ -59,22 +69,33 @@ def test_blank_and_whitespace_only_lines_are_dropped() -> None:
 
 
 def test_rejoined_chunks_equal_original_text() -> None:
-    text = "\n".join(f"Paragraph {i}. " + "word " * (i * 37 % 120) for i in range(200))
+    text = "\n".join(
+        f"Paragraph {i}. " + "word " * (i * 37 % 120) for i in range(200)
+    )
     chunks = chunk({"A-item7": text})
     assert chunks.height > 1
     assert "\n".join(chunks["text"].to_list()) == text
 
 
 def test_chunk_index_restarts_per_section_and_keys_are_unique() -> None:
-    long_text = "\n".join(["x" * 600] * 6)  # starts 0, 601, 1202, 1803, 2404, 3005 → 4 chunks
-    chunks = chunk({"A-item7": long_text, "A-item8": "Short.", "B-item1": long_text})
-    per_section = chunks.group_by("section_id", maintain_order=True).agg("chunk_index")
+    long_text = "\n".join(
+        ["x" * 600] * 6
+    )  # starts 0, 601, 1202, 1803, 2404, 3005 → 4 chunks
+    chunks = chunk(
+        {"A-item7": long_text, "A-item8": "Short.", "B-item1": long_text}
+    )
+    per_section = chunks.group_by("section_id", maintain_order=True).agg(
+        "chunk_index"
+    )
     assert per_section.rows() == [
         ("A-item7", [0, 1, 2, 3]),
         ("A-item8", [0]),
         ("B-item1", [0, 1, 2, 3]),
     ]
-    assert chunks.select(pl.struct("section_id", "chunk_index").n_unique()).item() == chunks.height
+    assert (
+        chunks.select(pl.struct("section_id", "chunk_index").n_unique()).item()
+        == chunks.height
+    )
 
 
 def test_no_empty_chunks_and_metadata_is_kept() -> None:

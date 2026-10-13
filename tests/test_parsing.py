@@ -8,7 +8,9 @@ from sec_10k_rag.step_02_parsing.html_text import html_to_text
 from sec_10k_rag.step_02_parsing.sections import split_into_items
 from sec_10k_rag.step_02_parsing.sgml import extract_10k_html
 
-BUSINESS: str = "We make electric cars. " * 100  # long enough to be the real Item 1
+BUSINESS: str = (
+    "We make electric cars. " * 100
+)  # long enough to be the real Item 1
 # A sentence that starts with "Item 1A" but is far too long to be a heading
 CROSS_REF: str = "Item 1A describes our risks, " + "which matter a lot, " * 10
 
@@ -38,7 +40,9 @@ def test_skips_table_of_contents_and_page_headers() -> None:
     sections = split_into_items(FILING)
     assert [s.item for s in sections] == ["1", "1A", "7"]
     assert sections[0].text.startswith("Item 1. Business\nWe make")
-    assert CROSS_REF.strip() in sections[0].text  # the long sentence is not a heading
+    assert (
+        CROSS_REF.strip() in sections[0].text
+    )  # the long sentence is not a heading
     # the repeated "Item 1A" page header stays inside Item 1A
     assert "Supply chains may break." in sections[1].text
     assert sections[2].title == "Management's Discussion and Analysis"

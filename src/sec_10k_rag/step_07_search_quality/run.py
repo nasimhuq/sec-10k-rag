@@ -14,7 +14,6 @@ from sec_10k_rag.step_07_search_quality.config import (
     get_config,
 )
 from sec_10k_rag.step_07_search_quality.lib import (
-    find_nearest_neighbors,
     generate_questions,
     get_question_vectors,
     load_chunks_text_from_db,
@@ -22,6 +21,7 @@ from sec_10k_rag.step_07_search_quality.lib import (
     sample_chunks,
     score,
 )
+from sec_10k_rag.step_07_search_quality.lib.search import search_chunks
 
 
 @with_progress
@@ -81,13 +81,11 @@ def main() -> None:
     if not isinstance(instructions, ScoreSearchInstructions):
         raise TypeError("expected ScoreSearchInstructions")
 
-    nearest_neighbors = with_progress(find_nearest_neighbors)(
+    nearest_neighbors = with_progress(search_chunks)(
         question_vector_df,
-        db=instructions.db,
-        table=instructions.chunks_table,
-        top_k=instructions.top_k,
-        filter_columns=instructions.filter_columns,
+        ins=instructions,
     )
+
     expected_rows = question_vector_df.height * instructions.top_k
     if nearest_neighbors.height != expected_rows:
         raise ValueError(

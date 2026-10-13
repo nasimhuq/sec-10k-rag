@@ -1,4 +1,4 @@
-"""Read the full-submission .txt: every document of a filing glued together in SGML."""
+"""Read the full-submission .txt: all documents of a filing, joined in SGML."""
 
 import re
 
@@ -10,7 +10,7 @@ TEXT: re.Pattern[str] = re.compile(r"<TEXT>(.*)</TEXT>", re.DOTALL)
 
 
 def extract_10k_html(submission: str) -> str:
-    """Full-submission text -> the HTML of the 10-K itself, without exhibits or XBRL files."""
+    """Full-submission text -> HTML of the 10-K only (no exhibits, no XBRL)."""
     for document in split_documents(submission):
         if document.doc_type == "10-K":
             # Inline XBRL filings wrap the HTML in <XBRL> ... </XBRL>
@@ -28,9 +28,11 @@ def split_documents(submission: str) -> list[SgmlDocument]:
 
 
 def to_document(block: str) -> SgmlDocument | None:
-    """One <DOCUMENT> block -> its type and text, or None if either is missing."""
+    """One <DOCUMENT> block -> its type and text, or None if one is missing."""
     type_match: re.Match[str] | None = TYPE.search(block)
     text_match: re.Match[str] | None = TEXT.search(block)
     if type_match is None or text_match is None:
         return None
-    return SgmlDocument(doc_type=type_match.group(1).strip(), text=text_match.group(1))
+    return SgmlDocument(
+        doc_type=type_match.group(1).strip(), text=text_match.group(1)
+    )

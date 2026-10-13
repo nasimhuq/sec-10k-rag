@@ -4,7 +4,11 @@ from pathlib import Path
 import polars as pl
 
 from sec_10k_rag.common.common import write_to_parquet_file
-from sec_10k_rag.step_03_flattening.flatten_pl import apply_map, convert, flatten
+from sec_10k_rag.step_03_flattening.flatten_pl import (
+    apply_map,
+    convert,
+    flatten,
+)
 
 RAW_DIR = Path("data/raw")
 SCRIPT_DIR = Path(__file__).parent
@@ -29,7 +33,9 @@ def main() -> None:
         t = time.perf_counter()
         src_df = pl.read_json(p)
         out_df = convert(apply_map(flatten(src_df), cfg_df), cfg_df)
-        frames.append(out_df.with_columns(pl.lit(p.parent.name).alias("ticker")))
+        frames.append(
+            out_df.with_columns(pl.lit(p.parent.name).alias("ticker"))
+        )
         print(p.parent.name, out_df.height, f"{time.perf_counter() - t:.2f}s")
 
     facts = pl.concat(frames, how="diagonal_relaxed")
