@@ -3,7 +3,7 @@ CREATE TABLE chunks (
     source_url TEXT,
     PRIMARY KEY (section_id, chunk_index),
     section_id TEXT NOT NULL,
-    chunk_index INT NOT NULL,
+    chunk_index BIGINT NOT NULL,
     ticker TEXT NOT NULL,
     cik TEXT NOT NULL,
     fiscal_year INT NOT NULL,

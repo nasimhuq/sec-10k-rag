@@ -1,5 +1,6 @@
 from .db import load_chunks_text_from_db
 from .questions import generate_questions, sample_chunks
+from .rerank import rerank
 from .scoring import rank_of_source, score
 from .search import (
     find_keyword_matches,
@@ -20,4 +21,5 @@ __all__ = [
     "find_keyword_matches",
     "fuse_ranks",
     "search_chunks",
+    "rerank",
 ]

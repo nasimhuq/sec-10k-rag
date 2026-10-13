@@ -17,9 +17,14 @@ from sec_10k_rag.step_07_search_quality.config import (
     ConfigType,
     DbConnInfo,
     ScoreSearchInstructions,
+    SearchMode,
     get_config,
 )
-from sec_10k_rag.step_07_search_quality.lib.db import connect
+from sec_10k_rag.step_07_search_quality.lib.db import (
+    connect,
+    load_chunks_text_from_db,
+)
+from sec_10k_rag.step_07_search_quality.lib.rerank import rerank
 
 
 def get_question_vectors(questions_path: Path) -> pl.DataFrame:
@@ -166,14 +171,22 @@ def fuse_ranks(
 def search_chunks(
     vectors: pl.DataFrame, ins: ScoreSearchInstructions
 ) -> pl.DataFrame:
-    if not ins.hybrid:
+    if ins.search_mode is SearchMode.VECTOR:
         return find_nearest_neighbors(
             vectors, ins.db, ins.chunks_table, ins.top_k, ins.filter_columns
         )
+
     vector_ranks = find_nearest_neighbors(
         vectors, ins.db, ins.chunks_table, ins.candidate_k, ins.filter_columns
     )
     keyword_ranks = find_keyword_matches(
         vectors, ins.db, ins.chunks_table, ins.candidate_k, ins.filter_columns
     )
-    return fuse_ranks(vector_ranks, keyword_ranks, ins.rrf_k, ins.top_k)
+    if ins.search_mode is SearchMode.HYBRID:
+        return fuse_ranks(vector_ranks, keyword_ranks, ins.rrf_k, ins.top_k)
+
+    candidates = fuse_ranks(
+        vector_ranks, keyword_ranks, ins.rrf_k, ins.rerank_k
+    )
+    chunks_text = load_chunks_text_from_db(ins.db, ins.chunks_table)
+    return rerank(candidates, vectors, chunks_text, ins.rerank_model, ins.top_k)

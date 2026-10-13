@@ -418,11 +418,36 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
     - Example: vector rank 2 + keyword rank 5 → 1/62 + 1/65 = 0.032; vector rank 1 only → 1/61 = 0.016
   - [x] Wire into `run.py` + `config.py` (`candidate_k = 30`, `rrf_k = 60`, `hybrid = True`; `False` = 5b)
     - `lib/search.py` `search_chunks(vectors, ins)`: `hybrid=False` → one `find_nearest_neighbors` call (5b); `True` → vector top 30 + keyword top 30 → `fuse_ranks` → top 10. `run.py` calls `search_chunks`; the 490-row check stays
-    - Re-run any scorecard row by config only: baseline `filter_columns=(), hybrid=False`; 5b `hybrid=False`; 5c defaults
+    - Re-run any scorecard row by config only (`search_mode` replaced the `hybrid` flag in 5d): baseline `search_mode=SearchMode.VECTOR, filter_columns=()`; 5b `search_mode=SearchMode.VECTOR`; 5c `search_mode=SearchMode.HYBRID`; 5d defaults
   - [x] Re-score with `run.py` and record (2026-10-13; same as the notebook): recall@1 0.45, @3 0.63, @5 0.65, @10 0.78, MRR 0.55 (vs 5b: +0.02 / +0.06 / 0 / −0.02 / +0.02; one question dropped out of the top 10). 5b scores kept in `search_quality/backup/2026_10_12_15_29_02_scores.parquet`
-- [ ] **5d** Reranker
-  - [ ] Take the top 30 from 5c and re-order them with the cross-encoder `BAAI/bge-reranker-base` (`sentence_transformers.CrossEncoder`); keep the top 10
-  - [ ] Re-score and record
+- [x] **5d** Reranker
+  - [x] Take the top 30 from 5c and re-order them with the cross-encoder `BAAI/bge-reranker-base` (`sentence_transformers.CrossEncoder`); keep the top 10
+    - Why vector + keyword (5c): each finds what the other misses
+
+      | Question contains | Vector search (bge-small) | Keyword search |
+      |---|---|---|
+      | Same meaning, other words ("sales" vs "revenue") | ✅ | ❌ |
+      | Exact names, codes, rare terms ("Cybertruck", "Blackwell", "Item 1C") | often ❌, the term gets blurred into the general topic | ✅ exact match |
+
+      Neither one judges whether a chunk actually answers the question; only the cross-encoder does.
+    - Models compared:
+
+      | | bge-small (embedding) | bge-reranker-base (CrossEncoder) | gpt-oss-120b (LLM) |
+      |---|---|---|---|
+      | Size | ~33M parameters | ~278M parameters | ~120B parameters |
+      | Output | a vector | one score | generated text |
+      | Runs | on your laptop GPU | on your laptop GPU | OpenRouter API, paid |
+
+    - Search funnel: each stage is slower but smarter, so it runs only on what is left
+      ```
+      2,977 chunks
+        -> filters (5b):       one company + one year (~300)
+        -> vector + keyword:   30 + 30 candidates
+        -> RRF (5c):           one merged list
+        -> CrossEncoder (5d):  best 10, in order
+        -> LLM (/ask):         reads the top few, writes the answer
+      ```
+  - [x] Re-score and record (2026-10-13): recall@1 0.47, @3 0.69, @5 0.76, @10 0.80, MRR 0.59 (vs 5c: +0.02 / +0.06 / +0.10 / +0.02 / +0.04); not found 10 of 49 (was 11). 5c scores kept in `search_quality/backup/2026_10_13_00_07_43_scores.parquet`
 - [ ] **5e** Before/after scorecard
 
   | Change | recall@1 | recall@3 | recall@5 | recall@10 | MRR |
@@ -430,5 +455,5 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
   | Baseline (vectors only) | 0.22 | 0.39 | 0.45 | 0.59 | 0.34 |
   | + filters (5b) | 0.43 | 0.57 | 0.65 | 0.80 | 0.53 |
   | + hybrid (5c) | 0.45 | 0.63 | 0.65 | 0.78 | 0.55 |
-  | + reranker (5d) | | | | | |
+  | + reranker (5d) | 0.47 | 0.69 | 0.76 | 0.80 | 0.59 |
 - [ ] Checks: `uv run ruff check src tests`, `uv run pyright src tests`, `uv run pytest -q`

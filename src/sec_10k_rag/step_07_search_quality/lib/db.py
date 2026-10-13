@@ -26,4 +26,8 @@ def load_chunks_text_from_db(
         "ORDER BY section_id, chunk_index"
     )
     with connect(db_conn) as conn:
-        return pl.read_database(query, connection=conn)  # pyright: ignore[reportUnknownMemberType]
+        return pl.read_database(  # pyright: ignore[reportUnknownMemberType]
+            query,
+            connection=conn,
+            schema_overrides={"chunk_index": pl.Int64},
+        )

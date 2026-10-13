@@ -39,6 +39,7 @@ REPLY_SCHEMA = pl.Struct(
 LLM_MODEL_NAME = "openai/gpt-oss-120b"
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 FILTER_COLUMNS = ("ticker", "fiscal_year")
+RERANK_MODEL = "BAAI/bge-reranker-base"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -71,6 +72,12 @@ class GenerateQuestionsInstructions:
     )
 
 
+class SearchMode(StrEnum):
+    VECTOR = "vector"  # 5b (baseline also sets filter_columns=())
+    HYBRID = "hybrid"  # 5c: vector + keyword, RRF
+    RERANK = "rerank"  # 5d: 5c + CrossEncoder
+
+
 @dataclass(frozen=True, kw_only=True)
 class ScoreSearchInstructions:
     db: DbConnInfo
@@ -81,9 +88,11 @@ class ScoreSearchInstructions:
     chunks_table: str = PG_TABLE
     recall_ks: tuple[int, ...] = (1, 3, 5, 10)
     filter_columns: tuple[str, ...] = FILTER_COLUMNS
-    hybrid: bool = True  # False = vectors only (5b)
+    search_mode: SearchMode = SearchMode.RERANK
     candidate_k: int = 30  # rows taken from each search before fusing
     rrf_k: int = 60
+    rerank_k: int = 30  # fused rows sent to the reranker
+    rerank_model: str = RERANK_MODEL
 
 
 class ConfigType(StrEnum):
