@@ -459,3 +459,31 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
 
   Result: recall@5 0.45 → 0.76, MRR 0.34 → 0.59. Filters gave the biggest jump; the reranker helped most at @3 and @5.
 - [x] Checks: `uv run ruff check src tests` → passed; `uv run pyright src tests` → 0 errors; `uv run pytest -q` → 11 passed
+
+### Step 6 — MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop
+
+Code goes in a new package `src/sec_10k_rag/step_08_mcp_server/` (next folder in data-flow order).
+
+- [x] **6a** `search_filings` function, no MCP yet: one question + company + year → top chunks with citation info (2026-10-13)
+  - [x] `step_07_search_quality/lib/search.py`: split `vectorize_questions(questions)` out of `get_question_vectors` (adds `question_id`, query prefix, embeds); `get_question_vectors` now just loads the file and calls it. Exported in `lib/__init__.py`
+  - [x] `step_07_search_quality/config.py`: `source_url` added to `CHUNK_COLUMNS` (step 7 unaffected: `rerank` and `generate_questions` pick their own columns)
+  - [x] `step_08_mcp_server/lib/search_filings.py`: `search_filings(ticker, fiscal_year, query, top_k)`
+    - `ticker` ("TSLA", "MSFT", "NVDA"), not a company name, because the `chunks` table filters on `ticker`
+    - Builds a 1-row frame (`question`, `ticker`, `fiscal_year`) → `vectorize_questions` → `search_chunks` with the step 7 `SCORE_SEARCH` settings (filters 5b, hybrid 5c, reranker 5d) and `replace(instructions, top_k=top_k)`
+    - Joins `load_chunks_text_from_db` on `section_id` + `chunk_index`, sorts by `rank` (a Polars join doesn't keep row order)
+    - Returns `rank | section_id | chunk_index | item | title | source_url | rerank_score | text`
+  - [x] Tried in `notebooks/search_quality.ipynb` → shape (5, 8), all rows `TSLA-2024-`
+
+    Example:
+    ```
+    search_filings("TSLA", 2024, "How many vehicles did Tesla deliver?", top_k=5)
+
+    rank | section_id       | chunk_index | rerank_score
+    1    | TSLA-2024-item8  | 12          | 0.517
+    2    | TSLA-2024-item1A | 7           | 0.247
+    3    | TSLA-2024-item7  | 1           | 0.168
+    4    | TSLA-2024-item8  | 11          | 0.031
+    5    | TSLA-2024-item1A | 13          | 0.026
+    ```
+  - Notes: in a notebook, restart the kernel after moving a function between files (`%autoreload` missed it); Postgres must be up (`start_db()` from `common/common.py`)
+- [ ] Before the `answer` tool: new OpenRouter key in `.env` `OPEN_ROUTER_API_KEY` (old key returned 401 "User not found" on 2026-10-13)

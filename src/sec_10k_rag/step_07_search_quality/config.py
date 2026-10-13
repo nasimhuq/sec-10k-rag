@@ -23,9 +23,7 @@ COMPANY_NAMES: dict[str, str] = {
     "TSLA": "Tesla",
 }
 
-CHUNK_COLUMNS = (
-    "section_id, chunk_index, ticker, fiscal_year, item, title, text"
-)
+CHUNK_COLUMNS = "section_id, chunk_index, ticker, fiscal_year, item, title, source_url, text"
 QUESTION_PROMPT = """Write one question that the text below answers.
 Use your own words, not the text's. Name the company and fiscal year.
 "quote" must be copied exactly from the text, 5-15 words.

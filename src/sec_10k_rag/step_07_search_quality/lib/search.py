@@ -27,7 +27,7 @@ from sec_10k_rag.step_07_search_quality.lib.db import (
 from sec_10k_rag.step_07_search_quality.lib.rerank import rerank
 
 
-def get_question_vectors(questions_path: Path) -> pl.DataFrame:
+def vectorize_questions(questions: pl.DataFrame) -> pl.DataFrame:
     config = get_config(ConfigType.SCORE_SEARCH)
     instructions = config.instructions
 
@@ -36,12 +36,15 @@ def get_question_vectors(questions_path: Path) -> pl.DataFrame:
 
     embedding_config = get_embedding_config(EmbeddingConfigType.VECTORIZE)
 
-    questions = load_parquet(questions_path).with_row_index("question_id")
-
-    queries = questions.with_columns(
+    queries = questions.with_row_index("question_id").with_columns(
         (pl.lit(instructions.query_prefix) + pl.col("question")).alias("query")
     )
+
     return vectorize(embedding_config, queries, text_column_name="query")
+
+
+def get_question_vectors(questions_path: Path) -> pl.DataFrame:
+    return vectorize_questions(load_parquet(questions_path))
 
 
 def nearest_for_one(

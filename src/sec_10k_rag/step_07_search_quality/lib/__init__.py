@@ -8,6 +8,7 @@ from .search import (
     fuse_ranks,
     get_question_vectors,
     search_chunks,
+    vectorize_questions,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "fuse_ranks",
     "search_chunks",
     "rerank",
+    "vectorize_questions",
 ]
