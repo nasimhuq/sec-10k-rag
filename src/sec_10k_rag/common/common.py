@@ -180,7 +180,8 @@ def write_log(log_file: Path, entry: dict[str, object]) -> None:
                         timespec="milliseconds"
                     ),
                     "log": drop_empty(entry),
-                }
+                },
+                ensure_ascii=False,
             ),
             file=log,
         )

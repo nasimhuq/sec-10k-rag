@@ -89,16 +89,6 @@ def to_answer(top_chunks: pl.DataFrame, llm_reply: pl.DataFrame) -> Answer:
     )
 
 
-def valid_filing_attributes(filing_attributes: tuple[str, int] | str) -> bool:
-    return isinstance(filing_attributes, tuple) and len(filing_attributes) == 2
-
-
-def get_error_answer(filing_attributes: tuple[str, int] | str) -> Answer:
-    if isinstance(filing_attributes, str):
-        return Answer(answer=filing_attributes, citations=[])
-    return Answer(answer="Invalid filing attributes.", citations=[])
-
-
 def answer_question(question: str, instructions: AnswerInstructions) -> Answer:
     ticker, fiscal_year = with_progress(extract_filing_attributes)(question)
     checked = validate_filing_attributes(
