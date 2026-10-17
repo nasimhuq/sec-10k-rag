@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-DB_SERVICE = "db"
 ROOT_DIR = Path(__file__).resolve().parents[3]
 INPUT_DATA_DIR = ROOT_DIR / "data/raw"
 PROCESSED_DIR = ROOT_DIR / "data/processed"

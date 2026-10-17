@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 import threading
@@ -5,14 +6,15 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import wraps
 from itertools import cycle
 from pathlib import Path
 
 import polars as pl
 
-from sec_10k_rag.common.config import DB_SERVICE, ROOT_DIR
+from sec_10k_rag.common.config import ROOT_DIR
+from sec_10k_rag.common.db_config import DB_SERVICE
 
 BACKUP_STAMP = "%Y_%m_%d_%H_%M_%S"
 BACKUP_DIR_NAME = "backup"
@@ -22,6 +24,7 @@ CLEAR_TO_EOL = "\033[K"
 PROGRESS_WIDTH = 40
 PROGRESS_INDENT = " "
 DURATION_WIDTH = 7  # fits 9999.99
+EMPTY_LOG_VALUES: tuple[object, ...] = (None, [], "")
 _spinner_lock = threading.Lock()
 _print_lock = threading.Lock()
 
@@ -158,3 +161,26 @@ def load_ndjson(file_path: Path) -> pl.DataFrame:
 
 def load_parquet(file_path: Path) -> pl.DataFrame:
     return pl.read_parquet(file_path)
+
+
+def drop_empty(entry: dict[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in entry.items()
+        if value not in EMPTY_LOG_VALUES
+    }
+
+
+def write_log(log_file: Path, entry: dict[str, object]) -> None:
+    with log_file.open("a") as log:
+        print(
+            json.dumps(
+                {
+                    "timestamp": datetime.now(UTC).isoformat(
+                        timespec="milliseconds"
+                    ),
+                    "log": drop_empty(entry),
+                }
+            ),
+            file=log,
+        )

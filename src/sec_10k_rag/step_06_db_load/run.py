@@ -1,8 +1,4 @@
-import os
-
-import psycopg
-from dotenv import load_dotenv
-
+from sec_10k_rag.common.db_config import PG_TABLE, connect, get_db_conn_info
 from sec_10k_rag.step_06_db_load.config import get_config
 from sec_10k_rag.step_06_db_load.libs import (
     convert_embedding_column_to_text,
@@ -13,19 +9,10 @@ from sec_10k_rag.step_06_db_load.libs import (
 
 def main() -> None:
     config = get_config()
-    load_dotenv(config.root_dir / ".env")
     df = load_embedded_chunks(config.input_data_dir / "chunks_embedded.parquet")
     text_df = convert_embedding_column_to_text(df)
-    with psycopg.connect(
-        host="127.0.0.1",
-        port=os.environ["POSTGRES_PORT"],
-        dbname=os.environ["POSTGRES_DB"],
-        user=os.environ["POSTGRES_USER"],
-        password=os.environ["POSTGRES_PASSWORD"],
-    ) as conn:
-        replace_rows(
-            conn, text_df, "chunks"
-        )  # replace with actual table name and DataFrame
+    with connect(get_db_conn_info()) as conn:
+        replace_rows(conn, text_df, PG_TABLE)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw "
             "ON chunks USING hnsw (embedding vector_cosine_ops)"

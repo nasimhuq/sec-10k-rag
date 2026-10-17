@@ -1,4 +1,5 @@
 import os
+from functools import cache
 
 from dotenv import load_dotenv
 from openai import OpenAI as llm_client
@@ -10,6 +11,13 @@ __all__ = ["llm_client", "LLM_API_KEY", "LLM_BASE_URL"]
 load_dotenv(ROOT_DIR / ".env")
 LLM_API_KEY: str = os.environ["OPEN_ROUTER_API_KEY"]
 LLM_BASE_URL = "https://openrouter.ai/api/v1"
+
+
+@cache
+def get_llm(max_retries: int) -> llm_client:
+    return llm_client(
+        base_url=LLM_BASE_URL, api_key=LLM_API_KEY, max_retries=max_retries
+    )
 
 
 def ask_llm(

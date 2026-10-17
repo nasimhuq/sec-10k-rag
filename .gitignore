@@ -20,3 +20,4 @@ data/processed/*
 .ipynb_checkpoints/
 # editor settings
 .vscode/
+*.log

@@ -17,7 +17,8 @@ Newest entries at the bottom of each section. Checkboxes = still to do.
 | 4 | Postgres + pgvector: Docker DB, tables, chunk 10-K sections, embed, load into pgvector | — | ✅ (facts load deferred) |2026-10-05 | 2026-10-10 |
 | 4.5 | Search quality test: 50 questions with known answers, scored before improvements | 1.5 | ✅ | 2026-10-10 | 2026-10-12 |
 | 5 | Better retrieval: metadata filters, hybrid (BM25 + vectors), reranker; before/after scores | 2.5 | ✅ |2026-10-12 | 2026-10-13 |
-| 6 | MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop | 2 | ⬜ | | |
+| 6 | MCP server: one `search(question)` tool; test in Claude Desktop | 2 | ✅ | 2026-10-13 | 2026-10-16 |
+| 6.5 | Follow-up questions: rewrite a follow-up into a standalone question using the previous turn | 1 | ✅ | 2026-10-16 | 2026-10-17 |
 | 7 | Presentable: Streamlit UI, tests, Dockerfile, README (diagram + scorecard), demo video, GitHub | 2.5 | ⬜ | | |
 | | **MVP total** | **≈ 13–14** | | | |
 | 8 | (v2) Images: .jpg charts via vision model / OCR | 2 | ⬜ | | |
@@ -460,14 +461,14 @@ Why it differs from the Step 4.5 baseline (0.24 / 0.43 / 0.51 / 0.63 / 0.37): a 
   Result: recall@5 0.45 → 0.76, MRR 0.34 → 0.59. Filters gave the biggest jump; the reranker helped most at @3 and @5.
 - [x] Checks: `uv run ruff check src tests` → passed; `uv run pyright src tests` → 0 errors; `uv run pytest -q` → 11 passed
 
-### Step 6 — MCP server: `search_filings(company, year, query)`, `answer`; test in Claude Desktop
+### Step 6 — MCP server: one `search(question)` tool; test in Claude Desktop
 
 Code goes in a new package `src/sec_10k_rag/step_08_mcp_server/` (next folder in data-flow order).
 
 - [x] **6a** `search_filings` function, no MCP yet: one question + company + year → top chunks with citation info (2026-10-13)
   - [x] `step_07_search_quality/lib/search.py`: split `vectorize_questions(questions)` out of `get_question_vectors` (adds `question_id`, query prefix, embeds); `get_question_vectors` now just loads the file and calls it. Exported in `lib/__init__.py`
   - [x] `step_07_search_quality/config.py`: `source_url` added to `CHUNK_COLUMNS` (step 7 unaffected: `rerank` and `generate_questions` pick their own columns)
-  - [x] `step_08_mcp_server/lib/search_filings.py`: `search_filings(ticker, fiscal_year, query, top_k)`
+  - [x] `step_08_mcp_server/lib/search_filings.py`: `search_filings(ticker, fiscal_year, query, top_k)` (renamed `retrieve_top_chunks` in 6b)
     - `ticker` ("TSLA", "MSFT", "NVDA"), not a company name, because the `chunks` table filters on `ticker`
     - Builds a 1-row frame (`question`, `ticker`, `fiscal_year`) → `vectorize_questions` → `search_chunks` with the step 7 `SCORE_SEARCH` settings (filters 5b, hybrid 5c, reranker 5d) and `replace(instructions, top_k=top_k)`
     - Joins `load_chunks_text_from_db` on `section_id` + `chunk_index`, sorts by `rank` (a Polars join doesn't keep row order)
@@ -486,4 +487,163 @@ Code goes in a new package `src/sec_10k_rag/step_08_mcp_server/` (next folder in
     5    | TSLA-2024-item1A | 13          | 0.026
     ```
   - Notes: in a notebook, restart the kernel after moving a function between files (`%autoreload` missed it); Postgres must be up (`start_db()` from `common/common.py`)
-- [ ] Before the `answer` tool: new OpenRouter key in `.env` `OPEN_ROUTER_API_KEY` (old key returned 401 "User not found" on 2026-10-13)
+- [x] **6b** `search` MCP tool: one question in, answer + citations out (the server never returns chunks) (2026-10-15)
+  - Design change (2026-10-14): one tool instead of `search_filings` + `answer`. The server finds the company and year in the question itself and writes the answer with its own LLM, so every MCP client gets the same answer
+  - Main entities:
+    - **User**: types a question in Claude Desktop
+    - **MCP client** (Claude Desktop; `notebooks/mcp.ipynb` for testing): sends only `{question}`
+    - **MCP server** (`step_08_mcp_server/run.py`): one tool, calls `answer_question`
+    - **RAG services** (`step_08_mcp_server/lib/`): extract + validate ticker and year, retrieve top 5 chunks, ask the LLM
+    - **Data store**: Postgres `chunks` table
+  - Data flow:
+    ```
+    User: "How many vehicles did Tesla deliver in 2024?"
+      │
+      ▼
+    MCP client ── {question: "..."} ──► (stdio, JSON)
+      ▼
+    run.py: tool search(question) -> Answer
+      ▼
+    lib/answer.py: answer_question(question, ANSWER_INSTRUCTIONS)
+      │
+      ├─ 0. lib/extract_attributes.py
+      │     extract_filing_attributes(question) -> ("TSLA", 2024)  (None if not found)
+      │     validate_filing_attributes(...)     -> Success | Failure
+      │       Failure → Answer(answer="Please name the company: Microsoft, Nvidia, Tesla.", citations=[])
+      │
+      ├─ 1. lib/search_filings.py: retrieve_top_chunks(ticker, fiscal_year, question, instructions.search)
+      │     step 7 search: filters + hybrid + reranker → top 5 chunks
+      │
+      ├─ 2. build_passages: step 7 with_prompt → "[1] ...\n\n[2] ..."
+      │
+      ├─ 3. ask_llm (common/llm_config.py; openai/gpt-oss-120b via OpenRouter)
+      │     reply JSON: {"answer": "...", "sources": [1, 3]}
+      │
+      └─ 4. read_reply + to_answer: sources [1, 3] → rows with rank 1 and 3 → citations
+      ▼
+    {"answer": "...", "citations": [{section_id, item, title, source_url}]}
+    ```
+  - [x] Hello world MCP server (tool `greet`) + client in `notebooks/mcp.ipynb` (2026-10-14)
+    - `uv add mcp` (mcp 2.3.0): `from mcp.server.mcpserver import MCPServer` (`FastMCP` was renamed; `from mcp.server.fastmcp import FastMCP` raises an error)
+    - Client: `StdioServerParameters(command=sys.executable, args=["-m", "sec_10k_rag.step_08_mcp_server.run"], cwd=ROOT_DIR)`, then `async with Client(SERVER) as client:` → `list_tools()` / `call_tool("<tool>", {...})`; read `result.structured_content`
+    - Never `print()` to stdout inside a tool (stdout is the MCP channel; use stderr). "Connection closed" = the server crashed; run the module in a terminal to see why
+  - [x] `common/db_config.py`: `DbConnInfo`, `PG_TABLE`, `get_db_conn_info`, `connect` moved here so step 7 and step 8 share them (2026-10-15)
+  - [x] `common/result.py`: generic result type, no exceptions for expected errors (2026-10-15)
+    - `Failure(error_msg: str, error: Literal[True])`, `Success[T](values: T, error: Literal[False])`, `type Result[T] = Failure | Success[T]`
+    - TS comparison: `type Result<T> = { error: true; errorMsg: string } | { error: false; values: T }`; `if checked.error is True:` narrows the type like a TS discriminated union
+  - [x] `step_08_mcp_server/lib/config.py`: `AnswerInstructions` (`db`, `search` = `ScoreSearchInstructions(top_k=5)`, `llm_info` temperature 0, `chunks_table`, `prompt`), `get_answer_instructions`, `ANSWER_PROMPT`, `NO_ANSWER`
+  - [x] `lib/extract_attributes.py`: rules-based, no LLM (2026-10-15)
+    - `extract_filing_attributes(question) -> tuple[str | None, int | None]`: `find_ticker` (ticker or company name from step 7 `COMPANY_NAMES`, case-insensitive) + `find_fiscal_year` (first `20xx`)
+    - `validate_filing_attributes(ticker, fiscal_year, filings) -> Result[tuple[str, int]]`: checks against the filings in Postgres (`available_filings` in `lib/answer.py`, cached)
+    - Kept separate so `answer_question` doesn't change when the rules change
+    - Examples:
+
+      | Question | Result |
+      |---|---|
+      | "How many vehicles did Tesla deliver in 2024?" | `Success(values=("TSLA", 2024))` |
+      | "How many vehicles were delivered in 2024?" | `Failure`: "Please name the company: Microsoft, Nvidia, Tesla." |
+      | "How many vehicles did Tesla deliver?" | `Failure`: "Please name a Tesla fiscal year: 2023, 2024, 2025." |
+  - [x] `lib/search_filings.py`: `retrieve_top_chunks(ticker, fiscal_year, query, instructions)` (the 6a `search_filings`, now takes `ScoreSearchInstructions` from the config)
+  - [x] `lib/answer.py`: `Citation`, `Answer` (TypedDicts, so the MCP tool returns JSON), `build_passages`, `read_reply` (JSON → Polars via `REPLY_SCHEMA`), `to_answer`, `answer_question`
+    - `to_answer`: keeps only the chunks whose `rank` is in `sources`, one citation per `section_id`; empty answer → `NO_ANSWER`
+  - [x] `run.py`: MCP tool `search(question) -> Answer` calls `answer_question(question, ANSWER_INSTRUCTIONS)`
+  - [x] Checks (2026-10-15): logic tried with stubs (no Postgres, no LLM); `uv run ruff check` + `uv run pyright src/sec_10k_rag/step_08_mcp_server` → 0 errors
+  - [x] New OpenRouter key in `.env` `OPEN_ROUTER_API_KEY` (old key returned 401 "User not found" on 2026-10-13; replaced by 2026-10-15)
+  - [x] Real run from `notebooks/mcp.ipynb` (Postgres + OpenRouter) (2026-10-15):
+    ```python
+    start_db()
+
+    SERVER = StdioServerParameters(
+        command=sys.executable,
+        args=["-m", "sec_10k_rag.step_08_mcp_server.run"],
+        cwd=ROOT_DIR,
+    )
+
+    async with Client(SERVER) as client:
+        result = await client.call_tool(
+            "search",
+            {
+                "question": "How many vehicles did Tesla deliver in 2024?",
+            },
+        )
+
+    pprint(result.structured_content)  # {"answer": "...", "citations": [...]}
+    ```
+  - [x] Try the error cases from the table above (2026-10-15): each returns its message with `citations: []`, because `answer_question` returns before search and the LLM call
+  - Node comparison: MCP server ≈ an Express app, the tool ≈ one route handler, Claude Desktop ≈ the client; it talks over stdio instead of HTTP
+- [x] **6c** Test in Claude Desktop (2026-10-16)
+  - [x] Add the server to `~/.config/Claude/claude_desktop_config.json` as a top-level `mcpServers` key (next to `preferences`, not inside it):
+    ```json
+    "mcpServers": {
+      "sec-10k-rag": {
+        "command": "/home/nasim/Desktop/work/rag/sec-10k-rag/.venv/bin/python",
+        "args": ["-m", "sec_10k_rag.step_08_mcp_server.run"]
+      }
+    },
+    ```
+  - [x] Restart Claude Desktop fully: closing the window leaves it running, so use `killall -9 claude-desktop`. Settings → Developer then shows `sec-10k-rag` as Running
+  - [x] The tool is on in **+** → Connectors → `sec-10k-rag`. Claude may still answer from its own knowledge, so name the tool in the question: "Use the sec-10k-rag search tool: …"
+  - [x] Ask the same questions in Claude Desktop and compare with the notebook (Postgres running):
+    | Question | Result |
+    |---|---|
+    | "How many vehicles did Tesla deliver in 2024?" | about 1,789,000, cited from Item 7 of Tesla's FY2024 10-K |
+    | "How many vehicles were delivered in 2024?" | "Please name the company: Microsoft, Nvidia, Tesla." |
+    | "How many vehicles did Tesla deliver?" | "Please name a Tesla fiscal year: 2023, 2024, 2025." (not yet tried in Claude Desktop) |
+
+### Step 6.5 — Follow-up questions: rewrite a follow-up into a standalone question using the previous turn ✅ (2026-10-16 to 2026-10-17)
+
+Before 6.5 each `search` call stood alone, so "What was their revenue of that year?" failed with "Please name the company…". Now one LLM call rewrites a follow-up into a standalone question before the 6b pipeline runs; `answer_question` is unchanged.
+
+- Design (2026-10-16):
+  - The client sends the history; the server stays stateless (no sessions to track or clear)
+  - `history` = all earlier turns of the chat, question + answer text only, no citations
+  - Empty `history` → no rewrite, no extra LLM call; the tool behaves exactly as in 6b
+  - Same LLM as the answer step (`ask_llm`, `openai/gpt-oss-120b`); a rules-only carry-forward of ticker/year was rejected because it can't resolve "next year"
+  - Claude Desktop fills `history` itself (confirmed in the log); `notebooks/mcp.ipynb` builds it from the previous `result.structured_content["answer"]`
+  - No relative-year rule in the prompt (Nasim, 2026-10-17): the LLM resolves "that year" / "next year" from the history
+- Data flow:
+  ```
+  Claude Desktop ── {question, history} ──► run.py: search(question, history) -> Answer
+    │
+    ├─ lib/question.py: get_rephrased_question_with_history(question, instructions, history)
+    │     history empty → question unchanged
+    │     else ask_llm(REPHRASED_QUESTION_PROMPT) → {"question": "..."} → standalone question
+    │
+    ├─ common/common.py: write_log(LOG_FILE, {question, rephrased_question, history})
+    │
+    ├─ lib/answer.py: answer_question(rephrased_question, ANSWER_INSTRUCTIONS)   (6b, unchanged)
+    │
+    └─ write_log(LOG_FILE, {answer})
+    ▼
+  {"answer": "...", "citations": [...]}
+  ```
+- [x] `step_08_mcp_server/lib/config.py`: `Turn` (TypedDict: `question`, `answer`), `REPHRASED_QUESTION_PROMPT`, `LOG_FILE = ROOT_DIR / "mcp_server.log"`
+  - Prompt: "Rephrase the current question as a standalone question, using the earlier questions and answers for context. Do not add facts from earlier answers." (the last line stopped rewrites like "…in 2024, the year they delivered approximately 1,789,000 vehicles?")
+- [x] `step_08_mcp_server/lib/question.py`: `get_rephrased_question_with_history(question, instructions, history) -> str`
+  - Builds `Q: …\nA: …` per turn + `Current question: …`, asks for JSON `{"question": "..."}`, reads it with `json.loads(...).get("question", question)`
+  - JSON because `ask_llm` (`common/llm_config.py`) always sends `response_format={"type": "json_object"}`
+- [x] `common/llm_config.py`: `get_llm(max_retries)` moved here from `lib/answer.py` (cached), so the answer and rewrite steps share one client
+- [x] `run.py`: `search(question, history=None)`
+  - Parameters described with `Annotated[..., Field(description=...)]` (shown in the tool's input schema); `history: list[Turn] | None`
+  - Docstring tells Claude: "Always pass the user's words unchanged in `question` and all earlier turns of this chat in `history`."
+  - Calls `get_rephrased_question_with_history`, then `answer_question` with the rewritten question
+  - mcp 2.3.0 notes (verified): `def search(**kwargs)` becomes one required string parameter `kwargs`; untyped parameters show as `"type": "string"`; so name and type every parameter
+- [x] `common/common.py`: `write_log(log_file, entry: dict[str, object])` + `drop_empty`
+  - One JSON object per line: `{"timestamp": <ISO, milliseconds>, "log": {...}}`
+  - `drop_empty` removes `None`, `[]`, `""` (keeps `0` / `False`), so a first question logs only `{"question": ...}`
+  - Why a log file: the server's stderr goes to Claude Desktop (or, from a notebook, to the `jupyter lab` terminal), and `print()` to stdout breaks the MCP channel. Watch it with `tail -f mcp_server.log` in the repo folder
+- [x] Two-turn test in Claude Desktop (2026-10-17), from `mcp_server.log`:
+
+  | User typed | `rephrased_question` | Answer |
+  |---|---|---|
+  | "How many vehicles did Tesla deliver in 2024?" | (none, no history) | approximately 1,789,000 consumer vehicles, cited `TSLA-2024-item7` |
+  | "What was their revenue of that year?" | "What was Tesla's revenue in 2024?" | $97.69 billion, cited `TSLA-2024-item7` |
+  | "What about their revenue of the next year?" | "What was Tesla's revenue in 2025?" | "The LLM returned no answer." (see open items) |
+
+  Example log line:
+  ```
+  {"timestamp": "2026-10-17T02:36:35.633+00:00", "log": {"question": "What was their revenue of that year?", "rephrased_question": "What was Tesla's revenue in 2024?", "history": [{"question": "How many vehicles did Tesla deliver in 2024?", "answer": "approximately 1,789,000 consumer vehicles"}]}}
+  ```
+- Open items (outside 6.5, in the 6b pipeline):
+  - "What was Tesla's revenue in 2025?" → `NO_ANSWER`; the rewrite is right, so the cause is in retrieval or the answer LLM. Next: log the raw `reply` from `ask_llm` in `answer_question`
+  - Two-year questions ("2024 and 2025") search one 10-K only: `find_fiscal_year` takes the first `20xx`

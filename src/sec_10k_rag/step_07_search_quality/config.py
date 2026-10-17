@@ -12,18 +12,25 @@ from sec_10k_rag.common.config import (
     ROOT_DIR,
     Config,
 )
+from sec_10k_rag.common.db_config import (
+    PG_TABLE,
+    DbConnInfo,
+    get_db_conn_info,
+)
 
 SEARCH_QUALITY_DIR = PROCESSED_DIR / "search_quality"
 QUESTIONS_FILE = "questions.parquet"
 SCORES_FILE = "scores.parquet"
-PG_TABLE = "chunks"
 COMPANY_NAMES: dict[str, str] = {
     "MSFT": "Microsoft",
     "NVDA": "Nvidia",
     "TSLA": "Tesla",
 }
 
-CHUNK_COLUMNS = "section_id, chunk_index, ticker, fiscal_year, item, title, source_url, text"
+CHUNK_COLUMNS = (
+    "section_id, chunk_index, ticker, fiscal_year, "
+    "item, title, source_url, text"
+)
 QUESTION_PROMPT = """Write one question that the text below answers.
 Use your own words, not the text's. Name the company and fiscal year.
 "quote" must be copied exactly from the text, 5-15 words.
@@ -38,15 +45,6 @@ LLM_MODEL_NAME = "openai/gpt-oss-120b"
 QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
 FILTER_COLUMNS = ("ticker", "fiscal_year")
 RERANK_MODEL = "BAAI/bge-reranker-base"
-
-
-@dataclass(frozen=True, kw_only=True)
-class DbConnInfo:
-    port: str
-    dbname: str
-    user: str
-    password: str = field(repr=False)
-    host: str = "127.0.0.1"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -96,17 +94,6 @@ class ScoreSearchInstructions:
 class ConfigType(StrEnum):
     GENERATE_QUESTIONS = "generate_questions"
     SCORE_SEARCH = "score_search"
-
-
-def get_db_conn_info() -> DbConnInfo:
-    load_dotenv(ROOT_DIR / ".env")
-    return DbConnInfo(
-        port=os.environ["POSTGRES_PORT"],
-        dbname=os.environ["POSTGRES_DB"],
-        user=os.environ["POSTGRES_USER"],
-        password=os.environ["POSTGRES_PASSWORD"],
-        host=os.environ.get("POSTGRES_HOST", "127.0.0.1"),
-    )
 
 
 def get_generate_questions_config() -> Config[GenerateQuestionsInstructions]:

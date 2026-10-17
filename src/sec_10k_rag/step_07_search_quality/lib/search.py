@@ -6,6 +6,7 @@ from psycopg import sql
 from psycopg.rows import TupleRow
 
 from sec_10k_rag.common.common import load_parquet
+from sec_10k_rag.common.db_config import DbConnInfo, connect
 from sec_10k_rag.step_05_embedding.config import (
     ConfigType as EmbeddingConfigType,
 )
@@ -15,15 +16,11 @@ from sec_10k_rag.step_05_embedding.config import (
 from sec_10k_rag.step_05_embedding.vectorize import vectorize
 from sec_10k_rag.step_07_search_quality.config import (
     ConfigType,
-    DbConnInfo,
     ScoreSearchInstructions,
     SearchMode,
     get_config,
 )
-from sec_10k_rag.step_07_search_quality.lib.db import (
-    connect,
-    load_chunks_text_from_db,
-)
+from sec_10k_rag.step_07_search_quality.lib.db import load_chunks_text_from_db
 from sec_10k_rag.step_07_search_quality.lib.rerank import rerank
 
 
